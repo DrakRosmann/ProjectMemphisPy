@@ -1,4 +1,5 @@
 import sys
+import util.MPSoCConfig
 
 from PySide6.QtGui import QIcon, QPixmap
 from PySide6.QtWidgets import QApplication, QMainWindow, QFileDialog, QMessageBox, QWidget, QVBoxLayout
@@ -9,6 +10,8 @@ import commsUi
 from ui_mainwindow import MainWindow
 from commsUi import Ui_Form
 from taskmap import Ui_TaskMap
+from util import MPSoCConfig
+
 
 class MinhaJanela(QMainWindow, MainWindow):
     filePath = ""
@@ -17,6 +20,7 @@ class MinhaJanela(QMainWindow, MainWindow):
         # Configura a interface criada no Qt Designer
         self.setupUi(self)
 
+        mpconfig = None
         #:
         self.actionCommunication_Overview.setEnabled(False)
         self.actionDeloream.setEnabled(False)
@@ -68,7 +72,11 @@ class MinhaJanela(QMainWindow, MainWindow):
         #with open(self.filePath[0], "r") as file:
                # content = file.read()
                # print(content)
-        print(self.filePath)
+        mpconfig = MPSoCConfig.MPSoCConfig(self.filePath)
+
+
+
+
 
 
 

@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 ################################################################################
-## Form generated from reading UI file 'MenphisuiDRDXSX.ui'
+## Form generated from reading UI file 'MenphisuikGnzvR.ui'
 ##
 ## Created by: Qt User Interface Compiler version 6.11.1
 ##
@@ -95,7 +95,7 @@ class MainWindow(object):
         self.horizontalLayout_5.setObjectName(u"horizontalLayout_5")
         self.groupBox = QGroupBox(self.centralwidget)
         self.groupBox.setObjectName(u"groupBox")
-        sizePolicy1 = QSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
+        sizePolicy1 = QSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
         sizePolicy1.setHorizontalStretch(0)
         sizePolicy1.setVerticalStretch(0)
         sizePolicy1.setHeightForWidth(self.groupBox.sizePolicy().hasHeightForWidth())
