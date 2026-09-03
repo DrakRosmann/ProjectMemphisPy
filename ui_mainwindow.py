@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 ################################################################################
-## Form generated from reading UI file 'MenphisuiidrXwd.ui'
+## Form generated from reading UI file 'MenphisuiDRDXSX.ui'
 ##
 ## Created by: Qt User Interface Compiler version 6.11.1
 ##
@@ -20,13 +20,13 @@ from PySide6.QtWidgets import (QApplication, QFrame, QGroupBox, QHBoxLayout,
     QHeaderView, QLabel, QLineEdit, QMainWindow,
     QMenu, QMenuBar, QPushButton, QSizePolicy,
     QSlider, QStatusBar, QTabWidget, QTableWidget,
-    QTableWidgetItem, QToolButton, QWidget)
+    QTableWidgetItem, QToolButton, QVBoxLayout, QWidget)
 
 class MainWindow(object):
     def setupUi(self, MainWindow):
         if not MainWindow.objectName():
             MainWindow.setObjectName(u"MainWindow")
-        MainWindow.resize(919, 619)
+        MainWindow.resize(986, 696)
         palette = QPalette()
         brush = QBrush(QColor(246, 245, 244, 255))
         brush.setStyle(Qt.BrushStyle.SolidPattern)
@@ -36,6 +36,7 @@ class MainWindow(object):
         palette.setBrush(QPalette.ColorGroup.Disabled, QPalette.ColorRole.Window, brush)
         MainWindow.setPalette(palette)
         MainWindow.setTabShape(QTabWidget.TabShape.Rounded)
+        MainWindow.setDockNestingEnabled(False)
         self.actionNew_Debugging = QAction(MainWindow)
         self.actionNew_Debugging.setObjectName(u"actionNew_Debugging")
         self.actionSave_Project = QAction(MainWindow)
@@ -73,41 +74,84 @@ class MainWindow(object):
         self.actionPacket_Format.setObjectName(u"actionPacket_Format")
         self.centralwidget = QWidget(MainWindow)
         self.centralwidget.setObjectName(u"centralwidget")
+        self.verticalLayout = QVBoxLayout(self.centralwidget)
+        self.verticalLayout.setSpacing(9)
+        self.verticalLayout.setObjectName(u"verticalLayout")
+        self.verticalLayout.setContentsMargins(1, 1, 1, 0)
+        self.frame = QFrame(self.centralwidget)
+        self.frame.setObjectName(u"frame")
+        sizePolicy = QSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
+        sizePolicy.setHorizontalStretch(0)
+        sizePolicy.setVerticalStretch(0)
+        sizePolicy.setHeightForWidth(self.frame.sizePolicy().hasHeightForWidth())
+        self.frame.setSizePolicy(sizePolicy)
+        self.frame.setMinimumSize(QSize(25, 25))
+        self.frame.setFrameShape(QFrame.Shape.StyledPanel)
+        self.frame.setFrameShadow(QFrame.Shadow.Raised)
+
+        self.verticalLayout.addWidget(self.frame)
+
+        self.horizontalLayout_5 = QHBoxLayout()
+        self.horizontalLayout_5.setObjectName(u"horizontalLayout_5")
         self.groupBox = QGroupBox(self.centralwidget)
         self.groupBox.setObjectName(u"groupBox")
-        self.groupBox.setGeometry(QRect(1, 490, 177, 79))
-        self.pushButton = QPushButton(self.groupBox)
-        self.pushButton.setObjectName(u"pushButton")
-        self.pushButton.setGeometry(QRect(40, 40, 31, 27))
+        sizePolicy1 = QSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
+        sizePolicy1.setHorizontalStretch(0)
+        sizePolicy1.setVerticalStretch(0)
+        sizePolicy1.setHeightForWidth(self.groupBox.sizePolicy().hasHeightForWidth())
+        self.groupBox.setSizePolicy(sizePolicy1)
+        self.groupBox.setMinimumSize(QSize(204, 20))
+        self.horizontalLayout_3 = QHBoxLayout(self.groupBox)
+        self.horizontalLayout_3.setObjectName(u"horizontalLayout_3")
         self.pushButton_2 = QPushButton(self.groupBox)
         self.pushButton_2.setObjectName(u"pushButton_2")
-        self.pushButton_2.setGeometry(QRect(10, 40, 31, 27))
+
+        self.horizontalLayout_3.addWidget(self.pushButton_2)
+
+        self.pushButton = QPushButton(self.groupBox)
+        self.pushButton.setObjectName(u"pushButton")
+
+        self.horizontalLayout_3.addWidget(self.pushButton)
+
         self.pushButton_3 = QPushButton(self.groupBox)
         self.pushButton_3.setObjectName(u"pushButton_3")
-        self.pushButton_3.setGeometry(QRect(80, 40, 51, 27))
+
+        self.horizontalLayout_3.addWidget(self.pushButton_3)
+
+
+        self.horizontalLayout_5.addWidget(self.groupBox)
+
         self.groupBox_2 = QGroupBox(self.centralwidget)
         self.groupBox_2.setObjectName(u"groupBox_2")
-        self.groupBox_2.setGeometry(QRect(184, 490, 176, 79))
+        sizePolicy1.setHeightForWidth(self.groupBox_2.sizePolicy().hasHeightForWidth())
+        self.groupBox_2.setSizePolicy(sizePolicy1)
+        self.horizontalLayout_4 = QHBoxLayout(self.groupBox_2)
+        self.horizontalLayout_4.setObjectName(u"horizontalLayout_4")
         self.horizontalSlider = QSlider(self.groupBox_2)
         self.horizontalSlider.setObjectName(u"horizontalSlider")
-        self.horizontalSlider.setGeometry(QRect(10, 25, 131, 31))
         self.horizontalSlider.setContextMenuPolicy(Qt.ContextMenuPolicy.DefaultContextMenu)
         self.horizontalSlider.setOrientation(Qt.Orientation.Horizontal)
         self.horizontalSlider.setTickPosition(QSlider.TickPosition.NoTicks)
-        self.label = QLabel(self.groupBox_2)
-        self.label.setObjectName(u"label")
-        self.label.setGeometry(QRect(90, 50, 41, 19))
+
+        self.horizontalLayout_4.addWidget(self.horizontalSlider)
+
         self.label_2 = QLabel(self.groupBox_2)
         self.label_2.setObjectName(u"label_2")
-        self.label_2.setGeometry(QRect(70, 50, 21, 19))
-        self.frame = QFrame(self.centralwidget)
-        self.frame.setObjectName(u"frame")
-        self.frame.setGeometry(QRect(0, 0, 921, 491))
-        self.frame.setFrameShape(QFrame.Shape.StyledPanel)
-        self.frame.setFrameShadow(QFrame.Shadow.Raised)
+
+        self.horizontalLayout_4.addWidget(self.label_2)
+
+        self.label = QLabel(self.groupBox_2)
+        self.label.setObjectName(u"label")
+
+        self.horizontalLayout_4.addWidget(self.label)
+
+
+        self.horizontalLayout_5.addWidget(self.groupBox_2)
+
         self.groupBox_3 = QGroupBox(self.centralwidget)
         self.groupBox_3.setObjectName(u"groupBox_3")
-        self.groupBox_3.setGeometry(QRect(370, 490, 111, 79))
+        sizePolicy1.setHeightForWidth(self.groupBox_3.sizePolicy().hasHeightForWidth())
+        self.groupBox_3.setSizePolicy(sizePolicy1)
         self.horizontalLayout = QHBoxLayout(self.groupBox_3)
         self.horizontalLayout.setObjectName(u"horizontalLayout")
         self.lineEdit = QLineEdit(self.groupBox_3)
@@ -120,9 +164,13 @@ class MainWindow(object):
 
         self.horizontalLayout.addWidget(self.toolButton)
 
+
+        self.horizontalLayout_5.addWidget(self.groupBox_3)
+
         self.groupBox_4 = QGroupBox(self.centralwidget)
         self.groupBox_4.setObjectName(u"groupBox_4")
-        self.groupBox_4.setGeometry(QRect(490, 490, 391, 79))
+        sizePolicy1.setHeightForWidth(self.groupBox_4.sizePolicy().hasHeightForWidth())
+        self.groupBox_4.setSizePolicy(sizePolicy1)
         self.horizontalLayout_2 = QHBoxLayout(self.groupBox_4)
         self.horizontalLayout_2.setSpacing(0)
         self.horizontalLayout_2.setObjectName(u"horizontalLayout_2")
@@ -139,13 +187,24 @@ class MainWindow(object):
         __qtablewidgetitem3 = QTableWidgetItem()
         self.tableWidget.setHorizontalHeaderItem(3, __qtablewidgetitem3)
         self.tableWidget.setObjectName(u"tableWidget")
+        sizePolicy2 = QSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Ignored)
+        sizePolicy2.setHorizontalStretch(0)
+        sizePolicy2.setVerticalStretch(0)
+        sizePolicy2.setHeightForWidth(self.tableWidget.sizePolicy().hasHeightForWidth())
+        self.tableWidget.setSizePolicy(sizePolicy2)
 
         self.horizontalLayout_2.addWidget(self.tableWidget)
+
+
+        self.horizontalLayout_5.addWidget(self.groupBox_4)
+
+
+        self.verticalLayout.addLayout(self.horizontalLayout_5)
 
         MainWindow.setCentralWidget(self.centralwidget)
         self.menubar = QMenuBar(MainWindow)
         self.menubar.setObjectName(u"menubar")
-        self.menubar.setGeometry(QRect(0, 0, 919, 24))
+        self.menubar.setGeometry(QRect(0, 0, 986, 24))
         self.menuFile = QMenu(self.menubar)
         self.menuFile.setObjectName(u"menuFile")
         self.menuEdit = QMenu(self.menubar)
@@ -217,12 +276,12 @@ class MainWindow(object):
         self.actionAbout.setText(QCoreApplication.translate("MainWindow", u"About", None))
         self.actionPacket_Format.setText(QCoreApplication.translate("MainWindow", u"Packet Format", None))
         self.groupBox.setTitle(QCoreApplication.translate("MainWindow", u"Simulation Control", None))
-        self.pushButton.setText(QCoreApplication.translate("MainWindow", u">", None))
         self.pushButton_2.setText(QCoreApplication.translate("MainWindow", u">||", None))
+        self.pushButton.setText(QCoreApplication.translate("MainWindow", u">", None))
         self.pushButton_3.setText(QCoreApplication.translate("MainWindow", u"STOP", None))
         self.groupBox_2.setTitle(QCoreApplication.translate("MainWindow", u"Speed Control", None))
-        self.label.setText(QCoreApplication.translate("MainWindow", u"Ticks", None))
         self.label_2.setText("")
+        self.label.setText(QCoreApplication.translate("MainWindow", u"Ticks", None))
         self.groupBox_3.setTitle(QCoreApplication.translate("MainWindow", u"Back To", None))
         self.toolButton.setText(QCoreApplication.translate("MainWindow", u"...", None))
         self.groupBox_4.setTitle(QCoreApplication.translate("MainWindow", u"Current Packet Information", None))
