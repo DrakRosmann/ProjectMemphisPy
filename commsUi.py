@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 ################################################################################
-## Form generated from reading UI file 'CommwKzMyc.ui'
+## Form generated from reading UI file 'CommmLyrIx.ui'
 ##
 ## Created by: Qt User Interface Compiler version 6.11.1
 ##
@@ -16,14 +16,14 @@ from PySide6.QtGui import (QBrush, QColor, QConicalGradient, QCursor,
     QImage, QKeySequence, QLinearGradient, QPainter,
     QPalette, QPixmap, QRadialGradient, QTransform)
 from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QGroupBox,
-    QHeaderView, QLabel, QRadioButton, QSizePolicy,
-    QTableWidget, QTableWidgetItem, QWidget)
+    QHeaderView, QLabel, QRadioButton, QScrollArea,
+    QSizePolicy, QTableWidget, QTableWidgetItem, QWidget)
 
 class Ui_Form(object):
     def setupUi(self, Form):
         if not Form.objectName():
             Form.setObjectName(u"Form")
-        Form.resize(856, 344)
+        Form.resize(851, 344)
         self.groupBox = QGroupBox(Form)
         self.groupBox.setObjectName(u"groupBox")
         self.groupBox.setGeometry(QRect(0, 0, 291, 101))
@@ -79,6 +79,14 @@ class Ui_Form(object):
         self.label_3 = QLabel(self.groupBox_4)
         self.label_3.setObjectName(u"label_3")
         self.label_3.setGeometry(QRect(70, 60, 31, 20))
+        self.scrollArea = QScrollArea(Form)
+        self.scrollArea.setObjectName(u"scrollArea")
+        self.scrollArea.setGeometry(QRect(0, 110, 851, 241))
+        self.scrollArea.setWidgetResizable(True)
+        self.scrollAreaWidgetContents = QWidget()
+        self.scrollAreaWidgetContents.setObjectName(u"scrollAreaWidgetContents")
+        self.scrollAreaWidgetContents.setGeometry(QRect(0, 0, 849, 239))
+        self.scrollArea.setWidget(self.scrollAreaWidgetContents)
 
         self.retranslateUi(Form)
 

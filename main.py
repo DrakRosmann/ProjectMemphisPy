@@ -8,7 +8,7 @@ import commsUi
 # (Substitua 'ui_mainwindow' pelo nome correto do seu arquivo sem a extensão .py)
 from ui_mainwindow import MainWindow
 from commsUi import Ui_Form
-
+from taskmap import Ui_TaskMap
 
 class MinhaJanela(QMainWindow, MainWindow):
     filePath = ""
@@ -33,7 +33,7 @@ class MinhaJanela(QMainWindow, MainWindow):
         self.horizontalSlider.valueChanged.connect(self.updadeSlide)
         self.label_2.setText(f"{self.horizontalSlider.value()}")
         self.actionCommunication_Overview.triggered.connect(self.open_communication)
-
+        self.actionTask_Mapping_Overview.triggered.connect(self.open_taskmap)
 
     def open_communication(self):
         if self.filePath == "":
@@ -41,6 +41,10 @@ class MinhaJanela(QMainWindow, MainWindow):
             return
         self.janela_secundaria = NovaJanela()
         self.janela_secundaria.show()
+
+    def open_taskmap(self):
+        self.janela_taskmap = taskMap()
+        self.janela_taskmap.show()
 
     def updadeSlide(self, valor):
         self.label_2.setText(str(valor))
@@ -85,6 +89,11 @@ class NovaJanela(QWidget, Ui_Form):
             self.radioButton_2.setEnabled(True)
             self.radioButton_3.setEnabled(True)
             self.comboBox.setEnabled(True)
+
+class taskMap(QWidget, Ui_TaskMap):
+    def __init__(self):
+        super().__init__()
+        self.setupUi(self)
 
 if __name__ == "__main__":
     # Inicializa o aplicativo

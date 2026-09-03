@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 ################################################################################
-## Form generated from reading UI file 'MenphisuiPWvzjj.ui'
+## Form generated from reading UI file 'MenphisuiidrXwd.ui'
 ##
 ## Created by: Qt User Interface Compiler version 6.11.1
 ##
@@ -16,15 +16,17 @@ from PySide6.QtGui import (QAction, QBrush, QColor, QConicalGradient,
     QIcon, QImage, QKeySequence, QLinearGradient,
     QPainter, QPalette, QPixmap, QRadialGradient,
     QTransform)
-from PySide6.QtWidgets import (QApplication, QGroupBox, QLabel, QMainWindow,
+from PySide6.QtWidgets import (QApplication, QFrame, QGroupBox, QHBoxLayout,
+    QHeaderView, QLabel, QLineEdit, QMainWindow,
     QMenu, QMenuBar, QPushButton, QSizePolicy,
-    QSlider, QStatusBar, QTabWidget, QWidget)
+    QSlider, QStatusBar, QTabWidget, QTableWidget,
+    QTableWidgetItem, QToolButton, QWidget)
 
 class MainWindow(object):
     def setupUi(self, MainWindow):
         if not MainWindow.objectName():
-            MainWindow.setObjectName(u"MPSoC Debugger")
-        MainWindow.resize(814, 619)
+            MainWindow.setObjectName(u"MainWindow")
+        MainWindow.resize(919, 619)
         palette = QPalette()
         brush = QBrush(QColor(246, 245, 244, 255))
         brush.setStyle(Qt.BrushStyle.SolidPattern)
@@ -73,7 +75,7 @@ class MainWindow(object):
         self.centralwidget.setObjectName(u"centralwidget")
         self.groupBox = QGroupBox(self.centralwidget)
         self.groupBox.setObjectName(u"groupBox")
-        self.groupBox.setGeometry(QRect(0, 489, 141, 81))
+        self.groupBox.setGeometry(QRect(1, 490, 177, 79))
         self.pushButton = QPushButton(self.groupBox)
         self.pushButton.setObjectName(u"pushButton")
         self.pushButton.setGeometry(QRect(40, 40, 31, 27))
@@ -85,21 +87,65 @@ class MainWindow(object):
         self.pushButton_3.setGeometry(QRect(80, 40, 51, 27))
         self.groupBox_2 = QGroupBox(self.centralwidget)
         self.groupBox_2.setObjectName(u"groupBox_2")
-        self.groupBox_2.setGeometry(QRect(150, 490, 151, 80))
+        self.groupBox_2.setGeometry(QRect(184, 490, 176, 79))
         self.horizontalSlider = QSlider(self.groupBox_2)
         self.horizontalSlider.setObjectName(u"horizontalSlider")
-        self.horizontalSlider.setGeometry(QRect(10, 40, 131, 16))
+        self.horizontalSlider.setGeometry(QRect(10, 25, 131, 31))
+        self.horizontalSlider.setContextMenuPolicy(Qt.ContextMenuPolicy.DefaultContextMenu)
         self.horizontalSlider.setOrientation(Qt.Orientation.Horizontal)
+        self.horizontalSlider.setTickPosition(QSlider.TickPosition.NoTicks)
         self.label = QLabel(self.groupBox_2)
         self.label.setObjectName(u"label")
         self.label.setGeometry(QRect(90, 50, 41, 19))
         self.label_2 = QLabel(self.groupBox_2)
         self.label_2.setObjectName(u"label_2")
         self.label_2.setGeometry(QRect(70, 50, 21, 19))
+        self.frame = QFrame(self.centralwidget)
+        self.frame.setObjectName(u"frame")
+        self.frame.setGeometry(QRect(0, 0, 921, 491))
+        self.frame.setFrameShape(QFrame.Shape.StyledPanel)
+        self.frame.setFrameShadow(QFrame.Shadow.Raised)
+        self.groupBox_3 = QGroupBox(self.centralwidget)
+        self.groupBox_3.setObjectName(u"groupBox_3")
+        self.groupBox_3.setGeometry(QRect(370, 490, 111, 79))
+        self.horizontalLayout = QHBoxLayout(self.groupBox_3)
+        self.horizontalLayout.setObjectName(u"horizontalLayout")
+        self.lineEdit = QLineEdit(self.groupBox_3)
+        self.lineEdit.setObjectName(u"lineEdit")
+
+        self.horizontalLayout.addWidget(self.lineEdit)
+
+        self.toolButton = QToolButton(self.groupBox_3)
+        self.toolButton.setObjectName(u"toolButton")
+
+        self.horizontalLayout.addWidget(self.toolButton)
+
+        self.groupBox_4 = QGroupBox(self.centralwidget)
+        self.groupBox_4.setObjectName(u"groupBox_4")
+        self.groupBox_4.setGeometry(QRect(490, 490, 391, 79))
+        self.horizontalLayout_2 = QHBoxLayout(self.groupBox_4)
+        self.horizontalLayout_2.setSpacing(0)
+        self.horizontalLayout_2.setObjectName(u"horizontalLayout_2")
+        self.horizontalLayout_2.setContentsMargins(0, 0, 0, 0)
+        self.tableWidget = QTableWidget(self.groupBox_4)
+        if (self.tableWidget.columnCount() < 4):
+            self.tableWidget.setColumnCount(4)
+        __qtablewidgetitem = QTableWidgetItem()
+        self.tableWidget.setHorizontalHeaderItem(0, __qtablewidgetitem)
+        __qtablewidgetitem1 = QTableWidgetItem()
+        self.tableWidget.setHorizontalHeaderItem(1, __qtablewidgetitem1)
+        __qtablewidgetitem2 = QTableWidgetItem()
+        self.tableWidget.setHorizontalHeaderItem(2, __qtablewidgetitem2)
+        __qtablewidgetitem3 = QTableWidgetItem()
+        self.tableWidget.setHorizontalHeaderItem(3, __qtablewidgetitem3)
+        self.tableWidget.setObjectName(u"tableWidget")
+
+        self.horizontalLayout_2.addWidget(self.tableWidget)
+
         MainWindow.setCentralWidget(self.centralwidget)
         self.menubar = QMenuBar(MainWindow)
         self.menubar.setObjectName(u"menubar")
-        self.menubar.setGeometry(QRect(0, 0, 814, 24))
+        self.menubar.setGeometry(QRect(0, 0, 919, 24))
         self.menuFile = QMenu(self.menubar)
         self.menuFile.setObjectName(u"menuFile")
         self.menuEdit = QMenu(self.menubar)
@@ -177,6 +223,17 @@ class MainWindow(object):
         self.groupBox_2.setTitle(QCoreApplication.translate("MainWindow", u"Speed Control", None))
         self.label.setText(QCoreApplication.translate("MainWindow", u"Ticks", None))
         self.label_2.setText("")
+        self.groupBox_3.setTitle(QCoreApplication.translate("MainWindow", u"Back To", None))
+        self.toolButton.setText(QCoreApplication.translate("MainWindow", u"...", None))
+        self.groupBox_4.setTitle(QCoreApplication.translate("MainWindow", u"Current Packet Information", None))
+        ___qtablewidgetitem = self.tableWidget.horizontalHeaderItem(0)
+        ___qtablewidgetitem.setText(QCoreApplication.translate("MainWindow", u"Current", None))
+        ___qtablewidgetitem1 = self.tableWidget.horizontalHeaderItem(1)
+        ___qtablewidgetitem1.setText(QCoreApplication.translate("MainWindow", u"Target", None))
+        ___qtablewidgetitem2 = self.tableWidget.horizontalHeaderItem(2)
+        ___qtablewidgetitem2.setText(QCoreApplication.translate("MainWindow", u"Service", None))
+        ___qtablewidgetitem3 = self.tableWidget.horizontalHeaderItem(3)
+        ___qtablewidgetitem3.setText(QCoreApplication.translate("MainWindow", u"Size", None))
         self.menuFile.setTitle(QCoreApplication.translate("MainWindow", u"File", None))
         self.menuEdit.setTitle(QCoreApplication.translate("MainWindow", u"Edit", None))
         self.menuTools.setTitle(QCoreApplication.translate("MainWindow", u"Tools", None))
