@@ -50,7 +50,12 @@ class MinhaJanela(QMainWindow, MainWindow):
         self.label_2.setText(str(valor))
 
     def open_file(self):
-        self.filePath = QFileDialog.getOpenFileName(self, "Open File", "./")
+        self.filePath, _ = QFileDialog.getOpenFileName(
+            self,
+            "Open File",
+            "./",
+            "Config Files (*.cfg);;All Files (*)"
+        )
         if self.filePath != "":
             self.actionCommunication_Overview.setEnabled(True)
             self.actionDeloream.setEnabled(True)
@@ -60,9 +65,9 @@ class MinhaJanela(QMainWindow, MainWindow):
             self.actionTask_List.setEnabled(True)
 
         #TESTE:
-        with open(self.filePath[0], "r") as file:
-                content = file.read()
-                print(content)
+        #with open(self.filePath[0], "r") as file:
+               # content = file.read()
+               # print(content)
         print(self.filePath)
 
 

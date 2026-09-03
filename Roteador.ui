@@ -1,0 +1,415 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>Form</class>
+ <widget class="QWidget" name="Form">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>170</width>
+    <height>170</height>
+   </rect>
+  </property>
+  <property name="minimumSize">
+   <size>
+    <width>170</width>
+    <height>170</height>
+   </size>
+  </property>
+  <property name="maximumSize">
+   <size>
+    <width>170</width>
+    <height>170</height>
+   </size>
+  </property>
+  <property name="styleSheet">
+   <string>background-color: rgb(255, 255, 255);</string>
+  </property>
+  <widget class="QWidget" name="router">
+   <property name="geometry">
+    <rect>
+     <x>30</x>
+     <y>30</y>
+     <width>130</width>
+     <height>130</height>
+    </rect>
+   </property>
+   <widget class="QLabel" name="routerLabel">
+    <property name="geometry">
+     <rect>
+      <x>40</x>
+      <y>50</y>
+      <width>50</width>
+      <height>30</height>
+     </rect>
+    </property>
+    <property name="font">
+     <font>
+      <family>Arial</family>
+      <pointsize>14</pointsize>
+      <bold>true</bold>
+     </font>
+    </property>
+    <property name="alignment">
+     <set>Qt::AlignCenter</set>
+    </property>
+    <property name="text">
+     <string/>
+    </property>
+   </widget>
+   <widget class="QLabel" name="north_HIGH_Label">
+    <property name="geometry">
+     <rect>
+      <x>90</x>
+      <y>0</y>
+      <width>40</width>
+      <height>20</height>
+     </rect>
+    </property>
+    <property name="font">
+     <font>
+      <family>Andale Mono</family>
+      <pointsize>10</pointsize>
+     </font>
+    </property>
+    <property name="text">
+     <string>00.00%</string>
+    </property>
+   </widget>
+   <widget class="QLabel" name="south_HIGH_Label">
+    <property name="geometry">
+     <rect>
+      <x>82</x>
+      <y>110</y>
+      <width>40</width>
+      <height>20</height>
+     </rect>
+    </property>
+    <property name="font">
+     <font>
+      <family>Andale Mono</family>
+      <pointsize>10</pointsize>
+     </font>
+    </property>
+    <property name="text">
+     <string>00.00%</string>
+    </property>
+   </widget>
+   <widget class="QLabel" name="south_LOW_Label">
+    <property name="geometry">
+     <rect>
+      <x>20</x>
+      <y>110</y>
+      <width>40</width>
+      <height>20</height>
+     </rect>
+    </property>
+    <property name="font">
+     <font>
+      <family>Andale Mono</family>
+      <pointsize>10</pointsize>
+     </font>
+    </property>
+    <property name="text">
+     <string>00.00%</string>
+    </property>
+   </widget>
+   <widget class="QLabel" name="weast_LOW_Label">
+    <property name="geometry">
+     <rect>
+      <x>1</x>
+      <y>70</y>
+      <width>40</width>
+      <height>20</height>
+     </rect>
+    </property>
+    <property name="font">
+     <font>
+      <family>Andale Mono</family>
+      <pointsize>10</pointsize>
+     </font>
+    </property>
+    <property name="text">
+     <string>00.00%</string>
+    </property>
+   </widget>
+   <widget class="QLabel" name="weast_HIGH_Label">
+    <property name="geometry">
+     <rect>
+      <x>1</x>
+      <y>20</y>
+      <width>40</width>
+      <height>20</height>
+     </rect>
+    </property>
+    <property name="font">
+     <font>
+      <family>Andale Mono</family>
+      <pointsize>10</pointsize>
+     </font>
+    </property>
+    <property name="text">
+     <string>00.00%</string>
+    </property>
+   </widget>
+   <widget class="QLabel" name="north_LOW_Label">
+    <property name="geometry">
+     <rect>
+      <x>40</x>
+      <y>0</y>
+      <width>40</width>
+      <height>20</height>
+     </rect>
+    </property>
+    <property name="font">
+     <font>
+      <family>Andale Mono</family>
+      <pointsize>10</pointsize>
+     </font>
+    </property>
+    <property name="text">
+     <string>00.00%</string>
+    </property>
+   </widget>
+   <widget class="QLabel" name="east_HIGH_Label">
+    <property name="geometry">
+     <rect>
+      <x>90</x>
+      <y>40</y>
+      <width>40</width>
+      <height>20</height>
+     </rect>
+    </property>
+    <property name="font">
+     <font>
+      <family>Andale Mono</family>
+      <pointsize>10</pointsize>
+     </font>
+    </property>
+    <property name="text">
+     <string>00.00%</string>
+    </property>
+   </widget>
+   <widget class="QLabel" name="east_LOW_Label">
+    <property name="geometry">
+     <rect>
+      <x>90</x>
+      <y>90</y>
+      <width>40</width>
+      <height>20</height>
+     </rect>
+    </property>
+    <property name="font">
+     <font>
+      <family>Andale Mono</family>
+      <pointsize>10</pointsize>
+     </font>
+    </property>
+    <property name="text">
+     <string>00.00%</string>
+    </property>
+   </widget>
+  </widget>
+  <widget class="QWidget" name="out_north_HIGH">
+   <property name="geometry">
+    <rect>
+     <x>115</x>
+     <y>0</y>
+     <width>6</width>
+     <height>30</height>
+    </rect>
+   </property>
+  </widget>
+  <widget class="QWidget" name="in_north_HIGH">
+   <property name="geometry">
+    <rect>
+     <x>124</x>
+     <y>0</y>
+     <width>20</width>
+     <height>30</height>
+    </rect>
+   </property>
+  </widget>
+  <widget class="QWidget" name="out_weast_HIGH">
+   <property name="geometry">
+    <rect>
+     <x>0</x>
+     <y>77</y>
+     <width>30</width>
+     <height>6</height>
+    </rect>
+   </property>
+  </widget>
+  <widget class="QWidget" name="in_weast_HIGH">
+   <property name="geometry">
+    <rect>
+     <x>0</x>
+     <y>53</y>
+     <width>30</width>
+     <height>20</height>
+    </rect>
+   </property>
+  </widget>
+  <widget class="QWidget" name="in_east_LOW">
+   <property name="geometry">
+    <rect>
+     <x>160</x>
+     <y>120</y>
+     <width>33</width>
+     <height>20</height>
+    </rect>
+   </property>
+  </widget>
+  <widget class="QWidget" name="out_east_LOW">
+   <property name="geometry">
+    <rect>
+     <x>160</x>
+     <y>110</y>
+     <width>33</width>
+     <height>6</height>
+    </rect>
+   </property>
+  </widget>
+  <widget class="QWidget" name="in_south_LOW">
+   <property name="geometry">
+    <rect>
+     <x>50</x>
+     <y>160</y>
+     <width>20</width>
+     <height>30</height>
+    </rect>
+   </property>
+  </widget>
+  <widget class="QWidget" name="out_south_LOW">
+   <property name="geometry">
+    <rect>
+     <x>72</x>
+     <y>160</y>
+     <width>6</width>
+     <height>30</height>
+    </rect>
+   </property>
+  </widget>
+  <widget class="QWidget" name="in_south_HIGH">
+   <property name="geometry">
+    <rect>
+     <x>108</x>
+     <y>160</y>
+     <width>20</width>
+     <height>30</height>
+    </rect>
+   </property>
+  </widget>
+  <widget class="QWidget" name="out_south_HIGH">
+   <property name="geometry">
+    <rect>
+     <x>131</x>
+     <y>160</y>
+     <width>6</width>
+     <height>30</height>
+    </rect>
+   </property>
+  </widget>
+  <widget class="QWidget" name="out_weast_LOW">
+   <property name="geometry">
+    <rect>
+     <x>0</x>
+     <y>127</y>
+     <width>30</width>
+     <height>6</height>
+    </rect>
+   </property>
+  </widget>
+  <widget class="QWidget" name="in_weast_LOW">
+   <property name="geometry">
+    <rect>
+     <x>0</x>
+     <y>103</y>
+     <width>30</width>
+     <height>20</height>
+    </rect>
+   </property>
+  </widget>
+  <widget class="QWidget" name="in_east_HIGH">
+   <property name="geometry">
+    <rect>
+     <x>160</x>
+     <y>70</y>
+     <width>20</width>
+     <height>20</height>
+    </rect>
+   </property>
+  </widget>
+  <widget class="QWidget" name="out_east_HIGH">
+   <property name="geometry">
+    <rect>
+     <x>160</x>
+     <y>60</y>
+     <width>33</width>
+     <height>6</height>
+    </rect>
+   </property>
+  </widget>
+  <widget class="QWidget" name="out_north_LOW">
+   <property name="geometry">
+    <rect>
+     <x>57</x>
+     <y>0</y>
+     <width>6</width>
+     <height>30</height>
+    </rect>
+   </property>
+  </widget>
+  <widget class="QWidget" name="in_north_LOW">
+   <property name="geometry">
+    <rect>
+     <x>65</x>
+     <y>0</y>
+     <width>20</width>
+     <height>30</height>
+    </rect>
+   </property>
+  </widget>
+  <widget class="QWidget" name="local_out">
+   <property name="geometry">
+    <rect>
+     <x>0</x>
+     <y>20</y>
+     <width>20</width>
+     <height>20</height>
+    </rect>
+   </property>
+  </widget>
+  <widget class="QLabel" name="local_Label">
+   <property name="geometry">
+    <rect>
+     <x>20</x>
+     <y>18</y>
+     <width>40</width>
+     <height>20</height>
+    </rect>
+   </property>
+   <property name="font">
+    <font>
+     <family>Andale Mono</family>
+     <pointsize>10</pointsize>
+    </font>
+   </property>
+   <property name="text">
+    <string>00.00%</string>
+   </property>
+  </widget>
+  <widget class="QWidget" name="local_in">
+   <property name="geometry">
+    <rect>
+     <x>0</x>
+     <y>0</y>
+     <width>20</width>
+     <height>20</height>
+    </rect>
+   </property>
+  </widget>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>
