@@ -4,9 +4,7 @@ import util.MPSoCConfig
 from PySide6.QtGui import QIcon, QPixmap
 from PySide6.QtWidgets import QApplication, QMainWindow, QFileDialog, QMessageBox, QWidget, QVBoxLayout
 
-import commsUi
-# Importa a classe 'MainWindow' do arquivo que você gerou
-# (Substitua 'ui_mainwindow' pelo nome correto do seu arquivo sem a extensão .py)
+
 from ui_mainwindow import MainWindow
 from commsUi import Ui_Form
 from taskmap import Ui_TaskMap
@@ -20,7 +18,7 @@ class MinhaJanela(QMainWindow, MainWindow):
         # Configura a interface criada no Qt Designer
         self.setupUi(self)
 
-        mpconfig = None
+        mpconfig = MPSoCConfig
         #:
         self.actionCommunication_Overview.setEnabled(False)
         self.actionDeloream.setEnabled(False)
@@ -29,10 +27,9 @@ class MinhaJanela(QMainWindow, MainWindow):
         self.actionMessage_Log.setEnabled(False)
         self.actionTask_List.setEnabled(False)
 
-        # --- AQUI VOCÊ ADICIONA A LÓGICA DO SEU PROGRAMA ---
-        # Exemplo: Conectando o botão de "STOP" (pushButton_3) a uma função
+
         self.pushButton_3.clicked.connect(self.parar_simulacao)
-        self.actionExit.triggered.connect(self.close)  # Fecha o programa
+        self.actionExit.triggered.connect(self.close)
         self.actionNew_Debugging.triggered.connect(self.open_file)
         self.horizontalSlider.valueChanged.connect(self.updadeSlide)
         self.label_2.setText(f"{self.horizontalSlider.value()}")
@@ -68,14 +65,8 @@ class MinhaJanela(QMainWindow, MainWindow):
             self.actionMessage_Log.setEnabled(True)
             self.actionTask_List.setEnabled(True)
 
-        #TESTE:
-        #with open(self.filePath[0], "r") as file:
-               # content = file.read()
-               # print(content)
-        mpconfig = MPSoCConfig.MPSoCConfig(self.filePath)
-
-
-
+        if self.filePath != "":
+            mpconfig = MPSoCConfig.MPSoCConfig(self.filePath)
 
 
 
@@ -109,12 +100,12 @@ class taskMap(QWidget, Ui_TaskMap):
         self.setupUi(self)
 
 if __name__ == "__main__":
-    # Inicializa o aplicativo
+
     app = QApplication(sys.argv)
 
-    # Cria a janela principal
+
     janela = MinhaJanela()
     janela.show()
 
-    # Mantém o aplicativo rodando
+
     sys.exit(app.exec())

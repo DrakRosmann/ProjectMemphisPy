@@ -75,14 +75,13 @@ class MPSoCConfig(object):
                         self.clock_period_in_ns = int(config_info[1])
 
                     #case "BEGIN_task_name_relation":
-                        # Em Python, o iterador do arquivo é passado para continuar a leitura de onde parou
+
                         #self.initialize_task_naming(platform_file)
 
                     case "channel_number":
                         self.channel_number = int(config_info[1])
 
                     case _:
-                        # Equivalente ao 'default' do switch
                         pass
 
 
