@@ -1,9 +1,9 @@
 import sys
 import util.MPSoCConfig
 
-from PySide6.QtGui import QIcon, QPixmap
+from PySide6.QtGui import QIcon, QPixmap, Qt
 from PySide6.QtWidgets import (QApplication, QMainWindow, QFileDialog, QMessageBox, QWidget,
-                               QVBoxLayout, QGridLayout, QFrame, QScrollArea)
+                               QVBoxLayout, QGridLayout, QFrame, QScrollArea, QTableWidgetItem, QTableWidget)
 
 from Roteador import Roteador
 from ui_mainwindow import MainWindow
@@ -33,6 +33,7 @@ class MinhaJanela(QMainWindow, MainWindow):
         self.label_2.setText(f"{self.horizontalSlider.value()}")
         self.actionCommunication_Overview.triggered.connect(self.open_communication)
         self.actionTask_Mapping_Overview.triggered.connect(self.open_taskmap)
+        self.actionTask_List.triggered.connect(self.taskList)
 
     def open_communication(self):
         if self.filePath == "":
@@ -64,6 +65,37 @@ class MinhaJanela(QMainWindow, MainWindow):
             self.actionTask_List.setEnabled(True)
 
             self.mpconfig = MPSoCConfig.MPSoCConfig(self.filePath)
+
+    def taskList(self):
+
+        services_hash = self.mpconfig.get_task_name_hash()
+
+        self.task_list_frame = QWidget()
+        self.task_list_frame.setWindowTitle("Current Task List")
+
+        self.task_list_frame.setAttribute(Qt.WA_DeleteOnClose)
+
+        self.task_list_frame.setGeometry(100, 100, 500, 500)
+
+        table_widget = QTableWidget()
+        table_widget.setColumnCount(2)
+        table_widget.setHorizontalHeaderLabels(["Task Name", "ID"])
+        table_widget.setRowCount(len(services_hash))
+
+        for row, key in enumerate(sorted(services_hash.keys())):
+            task_name = services_hash[key]
+
+            name_item = QTableWidgetItem(task_name)
+            id_item = QTableWidgetItem(str(key))
+
+            table_widget.setItem(row, 0, name_item)
+            table_widget.setItem(row, 1, id_item)
+
+        layout = QVBoxLayout()
+        layout.addWidget(table_widget)
+        self.task_list_frame.setLayout(layout)
+
+        self.task_list_frame.show()
 
 
 

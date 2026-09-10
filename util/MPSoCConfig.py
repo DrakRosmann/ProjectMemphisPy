@@ -1,25 +1,9 @@
 import os
-
-class MPSoCConfig(object):
-
-    debugFile = ""
-    ##
-    routerAddressing = 0
-    mpsoc_x = 0
-    mpsoc_y = 0
-    cluster_x = 0
-    cluster_y = 0
-    managerPositionX = 0
-    managerPositionY = 0
-    global_position_x = 0
-    global_position_y = 0
-    globalManagerCluster = 0
-    flitSize = 0
-    clockPeriodInNs = 0
-    channel_number = 0
+from sortedcontainers import SortedDict
 
 
-    #Const:
+class MPSoCConfig:
+    # Constantes de Direção (Variáveis de Classe)
     EAST_IN_HIGH = 0
     EAST_OUT_HIGH = 1
     WEAST_IN_HIGH = 2
@@ -39,26 +23,38 @@ class MPSoCConfig(object):
     LOCAL_IN = 16
     LOCAL_OUT = 17
 
-    #Const:
+    # Constantes de Roteamento
     HAMILTONIAN = 0
     XY = 1
 
-    def __init__(self, debugFile):
-        self.debugFile = debugFile
+    def __init__(self, debug_file_path):
+        self.debug_file_path = debug_file_path
 
-        config_path = debugFile
+        # Inicializando variáveis de instância padrão
+        self.router_addressing = 0
+        self.mpsoc_x = 0
+        self.mpsoc_y = 0
+        self.cluster_x = 0
+        self.cluster_y = 0
+        self.manager_position_x = 0
+        self.manager_position_y = 0
+        self.global_position_x = 0
+        self.global_position_y = 0
+        self.global_manager_cluster = 0
+        self.flit_size = 0
+        self.clock_period_in_ns = 0
+        self.channel_number = 0
 
-        self.debug_dir_path = debugFile
+        self.services_hash = SortedDict()
+        self.task_name_hash = SortedDict()
 
-        with open(config_path, "r") as platform_file:
+        # Abre o arquivo em modo leitura de texto garantindo o encoding UTF-8
+        with open(debug_file_path, "r", encoding="utf-8") as platform_file:
             for line in platform_file:
-
                 config_info = line.strip().split()
-
 
                 if not config_info:
                     continue
-
 
                 match config_info[0]:
                     case "router_addressing":
@@ -66,42 +62,61 @@ class MPSoCConfig(object):
                             self.router_addressing = self.XY
                         else:
                             self.router_addressing = self.HAMILTONIAN
-
                     case "mpsoc_x":
                         self.mpsoc_x = int(config_info[1])
-
                     case "mpsoc_y":
                         self.mpsoc_y = int(config_info[1])
-
                     case "cluster_x":
                         self.cluster_x = int(config_info[1])
-
                     case "cluster_y":
                         self.cluster_y = int(config_info[1])
-
                     case "manager_position_x":
                         self.manager_position_x = int(config_info[1])
-
                     case "manager_position_y":
                         self.manager_position_y = int(config_info[1])
-
                     case "global_manager_cluster":
                         self.global_manager_cluster = int(config_info[1])
-
                     case "flit_size":
                         self.flit_size = int(config_info[1])
-
                     case "clock_period_ns":
                         self.clock_period_in_ns = int(config_info[1])
-
-                    #case "BEGIN_task_name_relation":
-
-                        #self.initialize_task_naming(platform_file)
-
                     case "channel_number":
                         self.channel_number = int(config_info[1])
-
+                    case "BEGIN_task_name_relation":
+                        # Passamos o OBJETO do arquivo, não a string do caminho
+                        self.initialize_task_naming(platform_file)
                     case _:
                         pass
 
+    def initialize_task_naming(self, platform_file):
+        """Lê as tarefas diretamente do objeto de arquivo aberto."""
+        self.task_name_hash = SortedDict()
 
+        # Continua iterando sobre as linhas do MESMO arquivo aberto no __init__
+        for line in platform_file:
+            line = line.strip()
+
+            if line == "END_task_name_relation":
+                break  # Sai do loop e devolve o controle para o __init__
+
+            if line == "":
+                continue
+
+            task_name_id = line.split(" ")
+
+            if len(task_name_id) >= 2:
+                task_name = task_name_id[0]
+                try:
+                    task_id = int(task_name_id[1])
+                    self.task_name_hash[task_id] = task_name
+                except ValueError:
+                    # Ignora caso o ID não seja um número válido
+                    continue
+
+    # Método de acesso necessário para compatibilidade com sua interface gráfica
+    def get_task_name_hash(self):
+        return self.task_name_hash
+
+    # Se você preferir manter o nome antigo estilo Java no seu código PySide
+    def getTaskNameHash(self):
+        return self.task_name_hash

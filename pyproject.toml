@@ -4,4 +4,6 @@ version = "0.1.0"
 requires-python = ">=3.14"
 dependencies = [
     "pyside6",
+    "sortedcontainers>=2.4.0",
+    "SortedDict",
 ]
