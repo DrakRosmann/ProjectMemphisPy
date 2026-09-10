@@ -5,7 +5,6 @@ from PySide6.QtGui import QIcon, QPixmap, Qt
 from PySide6.QtWidgets import (QApplication, QMainWindow, QFileDialog, QMessageBox, QWidget,
                                QVBoxLayout, QGridLayout, QFrame, QScrollArea, QTableWidgetItem, QTableWidget)
 
-from Roteador import Roteador
 from ui_mainwindow import MainWindow
 from commsUi import Ui_Form
 from taskmap import Ui_TaskMap
