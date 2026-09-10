@@ -2,9 +2,10 @@ import sys
 import util.MPSoCConfig
 
 from PySide6.QtGui import QIcon, QPixmap
-from PySide6.QtWidgets import QApplication, QMainWindow, QFileDialog, QMessageBox, QWidget, QVBoxLayout
+from PySide6.QtWidgets import (QApplication, QMainWindow, QFileDialog, QMessageBox, QWidget,
+                               QVBoxLayout, QGridLayout, QFrame, QScrollArea)
 
-
+from Roteador import Roteador
 from ui_mainwindow import MainWindow
 from commsUi import Ui_Form
 from taskmap import Ui_TaskMap
@@ -13,13 +14,12 @@ from util import MPSoCConfig
 
 class MinhaJanela(QMainWindow, MainWindow):
     filePath = ""
+    mpconfig = None
+
     def __init__(self):
         super().__init__()
-        # Configura a interface criada no Qt Designer
         self.setupUi(self)
 
-        mpconfig = MPSoCConfig
-        #:
         self.actionCommunication_Overview.setEnabled(False)
         self.actionDeloream.setEnabled(False)
         self.actionTask_Mapping_Overview.setEnabled(False)
@@ -27,8 +27,6 @@ class MinhaJanela(QMainWindow, MainWindow):
         self.actionMessage_Log.setEnabled(False)
         self.actionTask_List.setEnabled(False)
 
-
-        self.pushButton_3.clicked.connect(self.parar_simulacao)
         self.actionExit.triggered.connect(self.close)
         self.actionNew_Debugging.triggered.connect(self.open_file)
         self.horizontalSlider.valueChanged.connect(self.updadeSlide)
@@ -65,14 +63,10 @@ class MinhaJanela(QMainWindow, MainWindow):
             self.actionMessage_Log.setEnabled(True)
             self.actionTask_List.setEnabled(True)
 
-        if self.filePath != "":
-            mpconfig = MPSoCConfig.MPSoCConfig(self.filePath)
+            self.mpconfig = MPSoCConfig.MPSoCConfig(self.filePath)
 
 
 
-
-    def parar_simulacao(self):
-        print("Botão STOP clicado!")
 
 class NovaJanela(QWidget, Ui_Form):
     def __init__(self):
@@ -80,10 +74,8 @@ class NovaJanela(QWidget, Ui_Form):
         self.setupUi(self)
         self.checkBox.checkStateChanged.connect(self.CheckB)
 
-
-
     def CheckB(self):
-        if(self.checkBox.isChecked()):
+        if (self.checkBox.isChecked()):
             self.radioButton.setEnabled(False)
             self.radioButton_2.setEnabled(False)
             self.radioButton_3.setEnabled(False)
@@ -94,18 +86,17 @@ class NovaJanela(QWidget, Ui_Form):
             self.radioButton_3.setEnabled(True)
             self.comboBox.setEnabled(True)
 
+
 class taskMap(QWidget, Ui_TaskMap):
     def __init__(self):
         super().__init__()
         self.setupUi(self)
 
+
 if __name__ == "__main__":
-
     app = QApplication(sys.argv)
-
 
     janela = MinhaJanela()
     janela.show()
-
 
     sys.exit(app.exec())

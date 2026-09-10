@@ -20,6 +20,26 @@ class MPSoCConfig(object):
 
 
     #Const:
+    EAST_IN_HIGH = 0
+    EAST_OUT_HIGH = 1
+    WEAST_IN_HIGH = 2
+    WEAST_OUT_HIGH = 3
+    NORTH_IN_HIGH = 4
+    NORTH_OUT_HIGH = 5
+    SOUTH_IN_HIGH = 6
+    SOUTH_OUT_HIGH = 7
+    EAST_IN_LOW = 8
+    EAST_OUT_LOW = 9
+    WEAST_IN_LOW = 10
+    WEAST_OUT_LOW = 11
+    NORTH_IN_LOW = 12
+    NORTH_OUT_LOW = 13
+    SOUTH_IN_LOW = 14
+    SOUTH_OUT_LOW = 15
+    LOCAL_IN = 16
+    LOCAL_OUT = 17
+
+    #Const:
     HAMILTONIAN = 0
     XY = 1
 
