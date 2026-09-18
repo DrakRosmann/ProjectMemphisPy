@@ -1,7 +1,7 @@
 import sys
 import util.MPSoCConfig
 
-from PySide6.QtGui import QIcon, QPixmap, Qt
+from PySide6.QtGui import QIcon, QPixmap, Qt, QPalette, QColor, QAction, QKeySequence
 from PySide6.QtWidgets import (QApplication, QMainWindow, QFileDialog, QMessageBox, QWidget,
                                QVBoxLayout, QGridLayout, QFrame, QScrollArea, QTableWidgetItem, QTableWidget)
 
@@ -15,9 +15,28 @@ class MinhaJanela(QMainWindow, MainWindow):
     filePath = ""
     mpconfig = None
 
+    # Variável de controle do tema
+    is_dark_mode = False
+
     def __init__(self):
         super().__init__()
         self.setupUi(self)
+
+        # ---------------------------------------------------------
+        # SISTEMA DE TEMA (DARK/LIGHT MODE)
+        # ---------------------------------------------------------
+        # Limpa a paleta fixa gerada pelo arquivo .ui para herdar a do App
+        self.setPalette(QPalette())
+
+        # Cria uma ação para alternar o tema e adiciona no menu "Edit"
+        self.actionToggle_Theme = QAction("Alternar Tema (Dark/Light)", self)
+        self.actionToggle_Theme.setShortcut(QKeySequence("Ctrl+T"))
+        self.menuEdit.addAction(self.actionToggle_Theme)
+        self.actionToggle_Theme.triggered.connect(self.toggle_theme)
+
+        # Garante que o aplicativo inicie no modo claro padrão do estilo Fusion
+        self.apply_light_theme(QApplication.instance())
+        # ---------------------------------------------------------
 
         self.actionCommunication_Overview.setEnabled(False)
         self.actionDeloream.setEnabled(False)
@@ -33,6 +52,63 @@ class MinhaJanela(QMainWindow, MainWindow):
         self.actionCommunication_Overview.triggered.connect(self.open_communication)
         self.actionTask_Mapping_Overview.triggered.connect(self.open_taskmap)
         self.actionTask_List.triggered.connect(self.taskList)
+
+    # ==========================================
+    # LÓGICA DE MUDANÇA DE TEMA
+    # ==========================================
+    def toggle_theme(self):
+        app = QApplication.instance()
+        if not self.is_dark_mode:
+            self.apply_dark_theme(app)
+            self.is_dark_mode = True
+        else:
+            self.apply_light_theme(app)
+            self.is_dark_mode = False
+
+    def apply_dark_theme(self, app):
+        app.setStyle("Fusion")
+        dark_palette = QPalette()
+
+        # Configurando as cores do modo escuro
+        dark_palette.setColor(QPalette.ColorRole.Window, QColor(53, 53, 53))
+        dark_palette.setColor(QPalette.ColorRole.WindowText, Qt.GlobalColor.white)
+        dark_palette.setColor(QPalette.ColorRole.Base, QColor(35, 35, 35))
+        dark_palette.setColor(QPalette.ColorRole.AlternateBase, QColor(53, 53, 53))
+        dark_palette.setColor(QPalette.ColorRole.ToolTipBase, QColor(25, 25, 25))
+        dark_palette.setColor(QPalette.ColorRole.ToolTipText, Qt.GlobalColor.white)
+        dark_palette.setColor(QPalette.ColorRole.Text, Qt.GlobalColor.white)
+        dark_palette.setColor(QPalette.ColorRole.Button, QColor(53, 53, 53))
+        dark_palette.setColor(QPalette.ColorRole.ButtonText, Qt.GlobalColor.white)
+        dark_palette.setColor(QPalette.ColorRole.BrightText, Qt.GlobalColor.red)
+        dark_palette.setColor(QPalette.ColorRole.Link, QColor(42, 130, 218))
+        dark_palette.setColor(QPalette.ColorRole.Highlight, QColor(42, 130, 218))
+        dark_palette.setColor(QPalette.ColorRole.HighlightedText, Qt.GlobalColor.black)
+
+        # Aplica na aplicação inteira (afeta abas secundárias também)
+        app.setPalette(dark_palette)
+
+    def apply_light_theme(self, app):
+        app.setStyle("Fusion")
+        light_palette = QPalette()
+
+        # Força as cores do modo claro para sobrescrever o tema do Sistema Operacional
+        light_palette.setColor(QPalette.ColorRole.Window, QColor(240, 240, 240))
+        light_palette.setColor(QPalette.ColorRole.WindowText, Qt.GlobalColor.black)
+        light_palette.setColor(QPalette.ColorRole.Base, Qt.GlobalColor.white)
+        light_palette.setColor(QPalette.ColorRole.AlternateBase, QColor(225, 225, 225))
+        light_palette.setColor(QPalette.ColorRole.ToolTipBase, Qt.GlobalColor.white)
+        light_palette.setColor(QPalette.ColorRole.ToolTipText, Qt.GlobalColor.black)
+        light_palette.setColor(QPalette.ColorRole.Text, Qt.GlobalColor.black)
+        light_palette.setColor(QPalette.ColorRole.Button, QColor(240, 240, 240))
+        light_palette.setColor(QPalette.ColorRole.ButtonText, Qt.GlobalColor.black)
+        light_palette.setColor(QPalette.ColorRole.BrightText, Qt.GlobalColor.red)
+        light_palette.setColor(QPalette.ColorRole.Link, QColor(42, 130, 218))
+        light_palette.setColor(QPalette.ColorRole.Highlight, QColor(42, 130, 218))
+        light_palette.setColor(QPalette.ColorRole.HighlightedText, Qt.GlobalColor.white)
+
+        app.setPalette(light_palette)
+
+    # ==========================================
 
     def open_communication(self):
         if self.filePath == "":
@@ -66,13 +142,12 @@ class MinhaJanela(QMainWindow, MainWindow):
             self.mpconfig = MPSoCConfig.MPSoCConfig(self.filePath)
 
     def taskList(self):
-
         services_hash = self.mpconfig.get_task_name_hash()
 
         self.task_list_frame = QWidget()
         self.task_list_frame.setWindowTitle("Current Task List")
 
-        self.task_list_frame.setAttribute(Qt.WA_DeleteOnClose)
+        self.task_list_frame.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
 
         self.task_list_frame.setGeometry(100, 100, 500, 500)
 
@@ -95,7 +170,6 @@ class MinhaJanela(QMainWindow, MainWindow):
         self.task_list_frame.setLayout(layout)
 
         self.task_list_frame.show()
-
 
 
 
