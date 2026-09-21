@@ -9,11 +9,14 @@ from ui_mainwindow import MainWindow
 from commsUi import Ui_Form
 from taskmap import Ui_TaskMap
 from util import MPSoCConfig
+from router_matrix import RouterMatrixWidget
 
 
 class MinhaJanela(QMainWindow, MainWindow):
     filePath = ""
     mpconfig = None
+    router_matrix_widget = None
+    frame_scroll_area = None
 
     # Variável de controle do tema
     is_dark_mode = False
@@ -140,6 +143,53 @@ class MinhaJanela(QMainWindow, MainWindow):
             self.actionTask_List.setEnabled(True)
 
             self.mpconfig = MPSoCConfig.MPSoCConfig(self.filePath)
+            self.build_router_matrix()
+
+    def build_router_matrix(self):
+        """
+        Monta a matriz de roteadores dentro do self.frame do MainWindow,
+        usando mpsoc_x/mpsoc_y (nº de clusters) e cluster_x/cluster_y
+        (roteadores por cluster) lidos do arquivo de configuração atual.
+        """
+        if self.mpconfig is None:
+            return
+
+        # Cria a matriz de roteadores com base na configuração carregada
+        self.router_matrix_widget = RouterMatrixWidget(
+            self.mpconfig.mpsoc_x,
+            self.mpconfig.mpsoc_y,
+            self.mpconfig.cluster_x,
+            self.mpconfig.cluster_y,
+        )
+
+        # Primeira vez: cria um QScrollArea dentro do self.frame para
+        # comportar malhas maiores que a área visível da janela.
+        if self.frame_scroll_area is None:
+            self.frame_scroll_area = QScrollArea(self.frame)
+            # IMPORTANTE: widgetResizable=False. Com True, o Qt estica a
+            # matriz para preencher todo o frame e, sem stretch factor nas
+            # colunas/linhas do QGridLayout, esse espaço extra é distribuído
+            # como gaps entre os roteadores. Com False, a matriz mantém seu
+            # tamanho natural (roteadores colados) e o scroll aparece só se
+            # ela for maior que a área visível.
+            self.frame_scroll_area.setWidgetResizable(False)
+            self.frame_scroll_area.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+            frame_layout = QVBoxLayout(self.frame)
+            frame_layout.setContentsMargins(0, 0, 0, 0)
+            frame_layout.addWidget(self.frame_scroll_area)
+            self.frame.setLayout(frame_layout)
+
+        # Troca (ou define) o widget interno do scroll pela nova matriz,
+        # substituindo uma matriz antiga caso um novo arquivo seja aberto.
+        old_widget = self.frame_scroll_area.takeWidget()
+        if old_widget is not None:
+            old_widget.deleteLater()
+
+        # Garante que a matriz assuma seu tamanho real (layout aplicado)
+        # antes de ser exibida dentro do scroll area sem resize forçado.
+        self.router_matrix_widget.adjustSize()
+        self.frame_scroll_area.setWidget(self.router_matrix_widget)
 
     def taskList(self):
         services_hash = self.mpconfig.get_task_name_hash()
