@@ -17,6 +17,15 @@ A migração de Java para Python visa:
 
 ---
 
+## Fluxo de contribuição com Git
+
+* **Branches:** use um nome curto e descritivo, baseado no título de uma issue do GitHub ou no que está sendo implementado. Escreva em letras minúsculas e separe as palavras com hífens. Exemplo: `corrigir-decode`.
+* **Commits:** termine a mensagem com uma das categorias entre colchetes: `[enhancement]` para melhorias, `[feature]` para novas funcionalidades ou `[bugfix]` para correções. Exemplo: `Fixed error on Decode. [bugfix]`.
+* **Merges:** de preferência, abra um Pull Request (Merge Request) para integrar a branch. Descreva resumidamente o que foi implementado usando bullet points.
+* **Documentação:** coloque explicações mais extensas ou complexas no diretório `documentation/` e inclua um link para elas no Pull Request, quando pertinente.
+
+---
+
 ##  Tecnologias Utilizadas
 
 * **Linguagem:** [Python 3.10+](https://www.python.org/)
