@@ -10,6 +10,8 @@ from commsUi import Ui_Form
 from taskmap import Ui_TaskMap
 from util import MPSoCConfig
 from router_matrix import RouterMatrixWidget
+from slave_matrix import SlaveMatrixWidget
+from pe_matrix import PEMatrixWidget
 
 
 class MinhaJanela(QMainWindow, MainWindow):
@@ -117,11 +119,11 @@ class MinhaJanela(QMainWindow, MainWindow):
         if self.filePath == "":
             QMessageBox.warning(self, "Attention", "Please, load a debugging before")
             return
-        self.janela_secundaria = NovaJanela()
+        self.janela_secundaria = NovaJanela(self.mpconfig)
         self.janela_secundaria.show()
 
     def open_taskmap(self):
-        self.janela_taskmap = taskMap()
+        self.janela_taskmap = taskMap(self.mpconfig)
         self.janela_taskmap.show()
 
     def updadeSlide(self, valor):
@@ -224,10 +226,29 @@ class MinhaJanela(QMainWindow, MainWindow):
 
 
 class NovaJanela(QWidget, Ui_Form):
-    def __init__(self):
+    def __init__(self, mpconfig=None):
         super().__init__()
         self.setupUi(self)
+        self.mpconfig = mpconfig
         self.checkBox.checkStateChanged.connect(self.CheckB)
+
+        self.build_slave_matrix()
+
+    def build_slave_matrix(self):
+        """
+        Monta a matriz de slaves dentro do scrollArea gerado por commsUi.py
+        (self.scrollAreaWidgetContents), usando mpsoc_x/mpsoc_y do arquivo
+        de configuração atual — igual ao print do Communication Overview.
+        """
+        if self.mpconfig is None:
+            return
+
+        matrix = SlaveMatrixWidget(self.mpconfig.mpsoc_x, self.mpconfig.mpsoc_y)
+
+        layout = QVBoxLayout(self.scrollAreaWidgetContents)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(matrix)
+        self.scrollAreaWidgetContents.setLayout(layout)
 
     def CheckB(self):
         if (self.checkBox.isChecked()):
@@ -243,9 +264,28 @@ class NovaJanela(QWidget, Ui_Form):
 
 
 class taskMap(QWidget, Ui_TaskMap):
-    def __init__(self):
+    def __init__(self, mpconfig=None):
         super().__init__()
         self.setupUi(self)
+        self.mpconfig = mpconfig
+
+        self.build_pe_matrix()
+
+    def build_pe_matrix(self):
+        """
+        Monta a matriz de PEs dentro do scrollArea gerado por taskmap.py
+        (self.scrollAreaWidgetContents), usando mpsoc_x/mpsoc_y do arquivo
+        de configuração atual — igual ao print do Task Mapping Overview.
+        """
+        if self.mpconfig is None:
+            return
+
+        matrix = PEMatrixWidget(self.mpconfig.mpsoc_x, self.mpconfig.mpsoc_y)
+
+        layout = QVBoxLayout(self.scrollAreaWidgetContents)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(matrix)
+        self.scrollAreaWidgetContents.setLayout(layout)
 
 
 if __name__ == "__main__":
