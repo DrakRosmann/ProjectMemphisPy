@@ -26,9 +26,28 @@ cresce para cima (0x0, 0x1, 0x2, ... de baixo para cima).
 
 import math
 
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QFrame, QGridLayout, QWidget
 
 from Roteador import Ui_Form
+
+
+# Cores fixas do roteador, independentes do tema (claro/escuro) que o
+# MainWindow aplica globalmente via QApplication.setPalette(). Sem isso,
+# alternar o tema (Ctrl+T) recolore os widgets internos do roteador (portas,
+# rótulos) porque eles não têm paleta própria e herdam a paleta do app,
+# quebrando a visualização (fundo/texto ficam com a mesma cor, sumindo, ou
+# os pequenos retângulos de porta ficam visíveis onde antes eram
+# transparentes ao fundo).
+_ROUTER_STYLESHEET = """
+QWidget {
+    background-color: #ffffff;
+    color: #000000;
+}
+QLabel {
+    background-color: transparent;
+}
+"""
 
 
 class RouterWidget(QWidget, Ui_Form):
@@ -46,6 +65,14 @@ class RouterWidget(QWidget, Ui_Form):
         self.pos_y = pos_y
 
         self.routerLabel.setText(f"{pos_x}x{pos_y}")
+
+        # Isola este roteador do tema global do app (ver comentário acima
+        # de _ROUTER_STYLESHEET): fixa cores próprias em toda a subárvore,
+        # que não são afetadas por um app.setPalette() posterior.
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        for child in self.findChildren(QWidget):
+            child.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        self.setStyleSheet(_ROUTER_STYLESHEET)
 
     def set_link_load(self, direction_label: QWidget, value: float) -> None:
         """
@@ -123,6 +150,13 @@ class RouterMatrixWidget(QWidget):
             cluster_frame.setFrameShape(QFrame.Shape.Box)
             cluster_frame.setFrameShadow(QFrame.Shadow.Plain)
             cluster_frame.setLineWidth(1)
+            # Borda do cluster com cor fixa, isolada do tema global (mesmo
+            # motivo do _ROUTER_STYLESHEET: sem isso, o toggle Dark/Light
+            # do MainWindow também recolore essa borda de forma inconsistente).
+            cluster_frame.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+            cluster_frame.setStyleSheet(
+                "QFrame { background-color: #ffffff; border: 1px solid #808080; }"
+            )
 
         cluster_layout = QGridLayout(cluster_frame)
         cluster_layout.setSpacing(0)
