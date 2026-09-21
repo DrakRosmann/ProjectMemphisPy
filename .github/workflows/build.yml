@@ -1,0 +1,39 @@
+name: Build da aplicação
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Obter código
+        uses: actions/checkout@v4
+
+      - name: Configurar uv e Python
+        uses: astral-sh/setup-uv@v10.2.0
+        with:
+          python-version: "3.14"
+
+      - name: Instalar dependências
+        run: uv sync --locked
+
+      - name: Gerar executável
+        run: |
+          uv run --locked --with pyinstaller pyinstaller \
+            --noconfirm \
+            --clean \
+            --onedir \
+            --windowed \
+            --name MemphisVDebugger \
+            --add-data "images:images" \
+            --add-data "icon:icon" \
+            --add-data "color_spectrum.png:." \
+            main.py
+
+      - name: Conferir executável
+        run: test -x dist/MemphisVDebugger/MemphisVDebugger
