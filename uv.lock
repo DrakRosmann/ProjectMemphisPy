@@ -9,14 +9,12 @@ source = { virtual = "." }
 dependencies = [
     { name = "pyside6" },
     { name = "sortedcontainers" },
-    { name = "sorteddict" },
 ]
 
 [package.metadata]
 requires-dist = [
-    { name = "pyside6" },
+    { name = "pyside6", specifier = ">=6.7" },
     { name = "sortedcontainers", specifier = ">=2.4.0" },
-    { name = "sorteddict" },
 ]
 
 [[package]]
@@ -86,18 +84,4 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/e8/c4/ba2f8066cceb6f23394729afe52f3bf7adec04bf9ed2c820b39e19299111/sortedcontainers-2.4.0.tar.gz", hash = "sha256:25caa5a06cc30b6b83d11423433f65d1f9d76c4c6a0c90e3379eaa43b9bfdb88", size = 30594, upload-time = "2021-05-16T22:03:42.897Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/32/46/9cb0e58b2deb7f82b84065f37f3bffeb12413f947f9388e4cac22c4621ce/sortedcontainers-2.4.0-py2.py3-none-any.whl", hash = "sha256:a163dcaede0f1c021485e957a39245190e74249897e2ae4b2aa38595db237ee0", size = 29575, upload-time = "2021-05-16T22:03:41.177Z" },
-]
-
-[[package]]
-name = "sorteddict"
-version = "0.1.0"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/df/ee/3748fbecfc3c0fb5959a3ebda513573aec5dc92b3492745cf5b1ab0c47d1/sorteddict-0.1.0.tar.gz", hash = "sha256:efaf837b75cede1df906d27baa45008b0fc9f844903389e50b4d10ef2725bbd5", size = 10042, upload-time = "2026-07-13T14:21:14.723Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/47/b0/23a2ffca30690ddb95cfb2569585c631a1ebfedbad219541c95823d1a611/sorteddict-0.1.0-cp314-cp314-macosx_10_15_x86_64.whl", hash = "sha256:d48d8d7ecc4853ce19f1b905bfd2f8bf7c41085582839d0cfb57145f7fd300ac", size = 9873, upload-time = "2026-07-13T14:21:08.81Z" },
-    { url = "https://files.pythonhosted.org/packages/d3/54/f52f0576698ca1a1f50ea4cdaaca57e7fd24f99bb2fb8d3ab158af5f72d2/sorteddict-0.1.0-cp314-cp314-macosx_11_0_arm64.whl", hash = "sha256:39f74e77b24ba200b95ce9bb5a505d5ead4ba0088cc155701c96ba199814038a", size = 10248, upload-time = "2026-07-13T14:21:09.738Z" },
-    { url = "https://files.pythonhosted.org/packages/ec/1c/368485fb51140fb6a7d488c265e5a0bce62e6ce97ae7586e04eee87f25de/sorteddict-0.1.0-cp314-cp314-manylinux1_x86_64.manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_5_x86_64.whl", hash = "sha256:571fa9dc0796bc01277579e55050e9aeb8069f1286bb5b100a7fa6cce10de0be", size = 41632, upload-time = "2026-07-13T14:21:10.765Z" },
-    { url = "https://files.pythonhosted.org/packages/2b/0d/276a92b22a6f48a30a34f76cb315387f6c274ce68424aa216e3813729ddc/sorteddict-0.1.0-cp314-cp314-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:eaa1232c32dd9ed1c5a86c27213234ddf85eb1f840a015b5a60de0497c0abec0", size = 41740, upload-time = "2026-07-13T14:21:11.82Z" },
-    { url = "https://files.pythonhosted.org/packages/51/d4/a664cec8a9591b810eef2cb977d670c50213bc123b4dffa882bf36a02db1/sorteddict-0.1.0-cp314-cp314-win_amd64.whl", hash = "sha256:5b4a314f6db895674f40486d648365974a4df1f1ca681105692f8283fac32290", size = 11791, upload-time = "2026-07-13T14:21:12.807Z" },
-    { url = "https://files.pythonhosted.org/packages/6c/ef/ad8c6338122718764d680402890123c8d9ecd355fbf97bad6b93ee400dcb/sorteddict-0.1.0-cp314-cp314-win_arm64.whl", hash = "sha256:6c7d127407ae5a2ab53ffb7e20488c9b62b37a743bc907de16943629fbe99b9b", size = 12013, upload-time = "2026-07-13T14:21:13.778Z" },
 ]

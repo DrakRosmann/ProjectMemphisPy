@@ -1,4 +1,3 @@
-import os
 from sortedcontainers import SortedDict
 
 
@@ -6,16 +5,16 @@ class MPSoCConfig:
     # Constantes de Direção (Variáveis de Classe)
     EAST_IN_HIGH = 0
     EAST_OUT_HIGH = 1
-    WEAST_IN_HIGH = 2
-    WEAST_OUT_HIGH = 3
+    WEST_IN_HIGH = 2
+    WEST_OUT_HIGH = 3
     NORTH_IN_HIGH = 4
     NORTH_OUT_HIGH = 5
     SOUTH_IN_HIGH = 6
     SOUTH_OUT_HIGH = 7
     EAST_IN_LOW = 8
     EAST_OUT_LOW = 9
-    WEAST_IN_LOW = 10
-    WEAST_OUT_LOW = 11
+    WEST_IN_LOW = 10
+    WEST_OUT_LOW = 11
     NORTH_IN_LOW = 12
     NORTH_OUT_LOW = 13
     SOUTH_IN_LOW = 14
@@ -115,8 +114,4 @@ class MPSoCConfig:
 
     # Método de acesso necessário para compatibilidade com sua interface gráfica
     def get_task_name_hash(self):
-        return self.task_name_hash
-
-    # Se você preferir manter o nome antigo estilo Java no seu código PySide
-    def getTaskNameHash(self):
         return self.task_name_hash

@@ -1,9 +1,8 @@
 import sys
-import util.MPSoCConfig
 
-from PySide6.QtGui import QIcon, QPixmap, Qt, QPalette, QColor, QAction, QKeySequence
+from PySide6.QtGui import Qt, QPalette, QColor, QAction, QKeySequence
 from PySide6.QtWidgets import (QApplication, QMainWindow, QFileDialog, QMessageBox, QWidget,
-                               QVBoxLayout, QGridLayout, QFrame, QScrollArea, QTableWidgetItem, QTableWidget)
+                               QVBoxLayout, QScrollArea, QTableWidgetItem, QTableWidget)
 
 from ui_mainwindow import MainWindow
 from commsUi import Ui_Form
@@ -52,7 +51,7 @@ class MinhaJanela(QMainWindow, MainWindow):
 
         self.actionExit.triggered.connect(self.close)
         self.actionNew_Debugging.triggered.connect(self.open_file)
-        self.horizontalSlider.valueChanged.connect(self.updadeSlide)
+        self.horizontalSlider.valueChanged.connect(self.update_slide)
         self.label_2.setText(f"{self.horizontalSlider.value()}")
         self.actionCommunication_Overview.triggered.connect(self.open_communication)
         self.actionTask_Mapping_Overview.triggered.connect(self.open_taskmap)
@@ -123,10 +122,13 @@ class MinhaJanela(QMainWindow, MainWindow):
         self.janela_secundaria.show()
 
     def open_taskmap(self):
-        self.janela_taskmap = taskMap(self.mpconfig)
+        if self.filePath == "":
+            QMessageBox.warning(self, "Attention", "Please, load a debugging before")
+            return
+        self.janela_taskmap = TaskMapWindow(self.mpconfig)
         self.janela_taskmap.show()
 
-    def updadeSlide(self, valor):
+    def update_slide(self, valor):
         self.label_2.setText(str(valor))
 
     def open_file(self):
@@ -230,7 +232,7 @@ class NovaJanela(QWidget, Ui_Form):
         super().__init__()
         self.setupUi(self)
         self.mpconfig = mpconfig
-        self.checkBox.checkStateChanged.connect(self.CheckB)
+        self.checkBox.checkStateChanged.connect(self.on_checkbox_changed)
 
         self.build_slave_matrix()
 
@@ -250,7 +252,7 @@ class NovaJanela(QWidget, Ui_Form):
         layout.addWidget(matrix)
         self.scrollAreaWidgetContents.setLayout(layout)
 
-    def CheckB(self):
+    def on_checkbox_changed(self):
         if (self.checkBox.isChecked()):
             self.radioButton.setEnabled(False)
             self.radioButton_2.setEnabled(False)
@@ -263,7 +265,7 @@ class NovaJanela(QWidget, Ui_Form):
             self.comboBox.setEnabled(True)
 
 
-class taskMap(QWidget, Ui_TaskMap):
+class TaskMapWindow(QWidget, Ui_TaskMap):
     def __init__(self, mpconfig=None):
         super().__init__()
         self.setupUi(self)
