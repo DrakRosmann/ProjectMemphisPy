@@ -8,14 +8,12 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QFileDialog, QMessageB
 
 import theme
 from ui_mainwindow import MainWindow
-from commsUi import Ui_Form
-from taskmap import Ui_TaskMap
 from util import MPSoCConfig
 from information import MPSoCInformation
 from router_matrix import RouterMatrixWidget
 from simulation import SimulationController, MAX_REPAINT_SPEED, ticks_to_ms
-from slave_matrix import SlaveMatrixWidget
-from pe_matrix import PEMatrixWidget
+from overview_windows import CommunicationOverviewWindow, MessageLogWindow, TaskMappingWindow
+from deloream import DeloreamWindow
 
 
 class MinhaJanela(QMainWindow, MainWindow):
@@ -25,6 +23,10 @@ class MinhaJanela(QMainWindow, MainWindow):
     router_matrix_widget = None
     frame_scroll_area = None
     simulation = None
+    communication_window = None
+    task_mapping_window = None
+    message_log_window = None
+    deloream_window = None
 
     # Arquivos obrigatórios em um diretório de debug
     REQUIRED_FILES = ("platform.cfg", "services.cfg", "traffic_router.txt")
@@ -67,6 +69,8 @@ class MinhaJanela(QMainWindow, MainWindow):
         self.actionTask_Mapping_Overview.triggered.connect(self.open_taskmap)
         self.actionTask_List.triggered.connect(self.taskList)
         self.actionServices_List.triggered.connect(self.servicesList)
+        self.actionMessage_Log.triggered.connect(self.open_message_log)
+        self.actionDeloream.triggered.connect(self.open_deloream)
 
         # ---------------------------------------------------------
         # CONTROLE DA SIMULAÇÃO
@@ -124,15 +128,56 @@ class MinhaJanela(QMainWindow, MainWindow):
         if self.filePath == "":
             QMessageBox.warning(self, "Attention", "Please, load a debugging before")
             return
-        self.janela_secundaria = NovaJanela(self.mpconfig)
-        self.janela_secundaria.show()
+        # Reaproveita a janela se já estiver aberta
+        if self.communication_window is None or not self.communication_window.isVisible():
+            self.communication_window = CommunicationOverviewWindow(
+                self.mpconfig, self.mpsoc_information, self.simulation)
+        self.communication_window.show()
+        self.communication_window.raise_()
+        self.communication_window.activateWindow()
+
+    def open_deloream(self):
+        if self.filePath == "":
+            QMessageBox.warning(self, "Attention", "Please, load a debugging before")
+            return
+
+        testcase_path = self.mpconfig.get_testcase_path()
+        if testcase_path is None:
+            QMessageBox.warning(self, "Deloream",
+                                "The debug directory must be named \"debug\" and be inside the "
+                                "testcase folder (the one that contains the log/ folder).")
+            return
+
+        # Mesma janela enquanto estiver aberta; outro cenário recarrega a árvore
+        if self.deloream_window is None or not self.deloream_window.isVisible():
+            self.deloream_window = DeloreamWindow(testcase_path)
+        elif self.deloream_window.testcase_path != testcase_path:
+            self.deloream_window.load_testcase(testcase_path)
+        self.deloream_window.show()
+        self.deloream_window.raise_()
+        self.deloream_window.activateWindow()
+
+    def open_message_log(self):
+        if self.filePath == "":
+            QMessageBox.warning(self, "Attention", "Please, load a debugging before")
+            return
+        if self.message_log_window is None or not self.message_log_window.isVisible():
+            self.message_log_window = MessageLogWindow(
+                self.mpconfig, self.mpsoc_information, self.simulation)
+        self.message_log_window.show()
+        self.message_log_window.raise_()
+        self.message_log_window.activateWindow()
 
     def open_taskmap(self):
         if self.filePath == "":
             QMessageBox.warning(self, "Attention", "Please, load a debugging before")
             return
-        self.janela_taskmap = TaskMapWindow(self.mpconfig)
-        self.janela_taskmap.show()
+        if self.task_mapping_window is None or not self.task_mapping_window.isVisible():
+            self.task_mapping_window = TaskMappingWindow(
+                self.mpconfig, self.mpsoc_information, self.simulation)
+        self.task_mapping_window.show()
+        self.task_mapping_window.raise_()
+        self.task_mapping_window.activateWindow()
 
     def update_slide(self, valor):
         self.label_2.setText(str(valor))
@@ -234,6 +279,11 @@ class MinhaJanela(QMainWindow, MainWindow):
         self.simulation = SimulationController(self.mpconfig, self.mpsoc_information,
                                                self.router_matrix_widget, self)
         self.simulation.set_speed(self.horizontalSlider.value())
+
+        # Janelas de visão geral abertas passam a acompanhar o novo debug
+        for window in (self.communication_window, self.task_mapping_window, self.message_log_window):
+            if window is not None and window.isVisible():
+                window.set_information(self.mpconfig, self.mpsoc_information, self.simulation)
         self.simulation.time_changed.connect(self.update_simulation_time)
         self.simulation.packet_changed.connect(self.update_current_packet_table)
         self.simulation.running_changed.connect(self.on_simulation_running_changed)
@@ -415,69 +465,6 @@ class MinhaJanela(QMainWindow, MainWindow):
 
         table_frame.show()
         return table_frame
-
-
-class NovaJanela(QWidget, Ui_Form):
-    def __init__(self, mpconfig=None):
-        super().__init__()
-        self.setupUi(self)
-        self.mpconfig = mpconfig
-        self.checkBox.checkStateChanged.connect(self.on_checkbox_changed)
-
-        self.build_slave_matrix()
-
-    def build_slave_matrix(self):
-        """
-        Monta a matriz de slaves dentro do scrollArea gerado por commsUi.py
-        (self.scrollAreaWidgetContents), usando mpsoc_x/mpsoc_y do arquivo
-        de configuração atual — igual ao print do Communication Overview.
-        """
-        if self.mpconfig is None:
-            return
-
-        matrix = SlaveMatrixWidget(self.mpconfig.mpsoc_x, self.mpconfig.mpsoc_y)
-
-        layout = QVBoxLayout(self.scrollAreaWidgetContents)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.addWidget(matrix)
-        self.scrollAreaWidgetContents.setLayout(layout)
-
-    def on_checkbox_changed(self):
-        if (self.checkBox.isChecked()):
-            self.radioButton.setEnabled(False)
-            self.radioButton_2.setEnabled(False)
-            self.radioButton_3.setEnabled(False)
-            self.comboBox.setEnabled(False)
-        else:
-            self.radioButton.setEnabled(True)
-            self.radioButton_2.setEnabled(True)
-            self.radioButton_3.setEnabled(True)
-            self.comboBox.setEnabled(True)
-
-
-class TaskMapWindow(QWidget, Ui_TaskMap):
-    def __init__(self, mpconfig=None):
-        super().__init__()
-        self.setupUi(self)
-        self.mpconfig = mpconfig
-
-        self.build_pe_matrix()
-
-    def build_pe_matrix(self):
-        """
-        Monta a matriz de PEs dentro do scrollArea gerado por taskmap.py
-        (self.scrollAreaWidgetContents), usando mpsoc_x/mpsoc_y do arquivo
-        de configuração atual — igual ao print do Task Mapping Overview.
-        """
-        if self.mpconfig is None:
-            return
-
-        matrix = PEMatrixWidget(self.mpconfig.mpsoc_x, self.mpconfig.mpsoc_y)
-
-        layout = QVBoxLayout(self.scrollAreaWidgetContents)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.addWidget(matrix)
-        self.scrollAreaWidgetContents.setLayout(layout)
 
 
 if __name__ == "__main__":

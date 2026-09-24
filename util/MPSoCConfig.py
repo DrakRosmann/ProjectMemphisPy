@@ -1,3 +1,5 @@
+import os
+
 from sortedcontainers import SortedDict
 
 
@@ -277,10 +279,11 @@ class MPSoCConfig:
         return self.mpsoc_x * self.mpsoc_y
 
     def get_testcase_path(self):
-        index = self.debug_file_path.find("debug")
-        if index < 1:
+        """Pasta do cenário: a que contém o diretório de debug (e o log/)."""
+        debug_dir = os.path.normpath(self.debug_file_path)
+        if os.path.basename(debug_dir) != "debug":
             return None
-        return self.debug_file_path[:index - 1]
+        return os.path.dirname(debug_dir)
 
     def get_frequency_in_hz(self):
         return 1_000_000_000 // self.clock_period_in_ns

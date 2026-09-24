@@ -17,6 +17,7 @@ PE "0x0" fica no canto inferior esquerdo e o eixo Y cresce para cima.
 """
 
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import QGridLayout, QLabel, QSizePolicy, QVBoxLayout, QWidget
 
 
@@ -32,7 +33,19 @@ QLabel {
     background-color: transparent;
     color: #000000;
 }
+QLabel#peTitle {
+    font-weight: bold;
+}
 """
+
+# Uma linha de tarefa: fundo com a cor da aplicação
+_TASK_STYLESHEET = "QLabel {{ background-color: {background}; color: {text}; font-weight: bold; padding: 2px; }}"
+
+
+def _text_color_for(background: QColor) -> str:
+    """Texto preto em fundos claros e branco em fundos escuros."""
+    luminance = 0.299 * background.red() + 0.587 * background.green() + 0.114 * background.blue()
+    return "#000000" if luminance > 140 else "#ffffff"
 
 
 class PEWidget(QWidget):
@@ -62,12 +75,45 @@ class PEWidget(QWidget):
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(4, 4, 4, 4)
+        layout.setSpacing(2)
 
         self.pe_label = QLabel(f"PE{pos_x}x{pos_y}")
+        self.pe_label.setObjectName("peTitle")
         self.pe_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(self.pe_label)
 
+        # Linhas de tarefas (preenchidas por set_tasks), centralizadas na célula
+        layout.addStretch(1)
+        self.tasks_layout = QVBoxLayout()
+        self.tasks_layout.setSpacing(2)
+        layout.addLayout(self.tasks_layout)
+        layout.addStretch(1)
+
+        self.task_labels: list[QLabel] = []
+
         self.setLayout(layout)
+
+    def set_tasks(self, title: str, tasks: list[tuple[str, QColor]]) -> None:
+        """
+        Mostra o título do PE e uma linha por tarefa, cada uma com o texto
+        e a cor da aplicação a que pertence.
+        """
+        self.pe_label.setText(title)
+
+        # Reaproveita os rótulos existentes e cria/remove só a diferença
+        while len(self.task_labels) < len(tasks):
+            label = QLabel(self)
+            label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            self.tasks_layout.addWidget(label)
+            self.task_labels.append(label)
+        while len(self.task_labels) > len(tasks):
+            self.task_labels.pop().deleteLater()
+
+        for label, (text, color) in zip(self.task_labels, tasks):
+            label.setText(text)
+            style = _TASK_STYLESHEET.format(background=color.name(), text=_text_color_for(color))
+            if label.styleSheet() != style:
+                label.setStyleSheet(style)
 
     def set_task(self, task_name: str | None) -> None:
         """
