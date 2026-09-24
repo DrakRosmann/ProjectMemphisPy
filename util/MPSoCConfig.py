@@ -48,44 +48,47 @@ class MPSoCConfig:
         self.task_name_hash = SortedDict()
 
         # Abre o arquivo em modo leitura de texto garantindo o encoding UTF-8
-        with open(debug_file_path, "r", encoding="utf-8") as platform_file:
-            for line in platform_file:
-                config_info = line.strip().split()
+        try:
+            with open(debug_file_path+"/platform.cfg", "r", encoding="utf-8") as platform_file:
+                for line in platform_file:
+                    config_info = line.strip().split()
 
-                if not config_info:
-                    continue
+                    if not config_info:
+                        continue
 
-                match config_info[0]:
-                    case "router_addressing":
-                        if config_info[1].upper() == "XY":
-                            self.router_addressing = self.XY
-                        else:
-                            self.router_addressing = self.HAMILTONIAN
-                    case "mpsoc_x":
-                        self.mpsoc_x = int(config_info[1])
-                    case "mpsoc_y":
-                        self.mpsoc_y = int(config_info[1])
-                    case "cluster_x":
-                        self.cluster_x = int(config_info[1])
-                    case "cluster_y":
-                        self.cluster_y = int(config_info[1])
-                    case "manager_position_x":
-                        self.manager_position_x = int(config_info[1])
-                    case "manager_position_y":
-                        self.manager_position_y = int(config_info[1])
-                    case "global_manager_cluster":
-                        self.global_manager_cluster = int(config_info[1])
-                    case "flit_size":
-                        self.flit_size = int(config_info[1])
-                    case "clock_period_ns":
-                        self.clock_period_in_ns = int(config_info[1])
-                    case "channel_number":
-                        self.channel_number = int(config_info[1])
-                    case "BEGIN_task_name_relation":
-                        # Passamos o OBJETO do arquivo, não a string do caminho
-                        self.initialize_task_naming(platform_file)
-                    case _:
-                        pass
+                    match config_info[0]:
+                        case "router_addressing":
+                            if config_info[1].upper() == "XY":
+                                self.router_addressing = self.XY
+                            else:
+                                self.router_addressing = self.HAMILTONIAN
+                        case "mpsoc_x":
+                            self.mpsoc_x = int(config_info[1])
+                        case "mpsoc_y":
+                            self.mpsoc_y = int(config_info[1])
+                        case "cluster_x":
+                            self.cluster_x = int(config_info[1])
+                        case "cluster_y":
+                            self.cluster_y = int(config_info[1])
+                        case "manager_position_x":
+                            self.manager_position_x = int(config_info[1])
+                        case "manager_position_y":
+                            self.manager_position_y = int(config_info[1])
+                        case "global_manager_cluster":
+                            self.global_manager_cluster = int(config_info[1])
+                        case "flit_size":
+                            self.flit_size = int(config_info[1])
+                        case "clock_period_ns":
+                            self.clock_period_in_ns = int(config_info[1])
+                        case "channel_number":
+                            self.channel_number = int(config_info[1])
+                        case "BEGIN_task_name_relation":
+                            # Passamos o OBJETO do arquivo, não a string do caminho
+                            self.initialize_task_naming(platform_file)
+                        case _:
+                            pass
+        except FileNotFoundError:
+            print("Erro")
 
     def initialize_task_naming(self, platform_file):
         """Lê as tarefas diretamente do objeto de arquivo aberto."""
@@ -111,6 +114,7 @@ class MPSoCConfig:
                 except ValueError:
                     # Ignora caso o ID não seja um número válido
                     continue
+
 
     # Método de acesso necessário para compatibilidade com sua interface gráfica
     def get_task_name_hash(self):

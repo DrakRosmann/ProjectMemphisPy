@@ -1,3 +1,4 @@
+import os
 import sys
 
 from PySide6.QtGui import Qt, QPalette, QColor, QAction, QKeySequence
@@ -18,6 +19,9 @@ class MinhaJanela(QMainWindow, MainWindow):
     mpconfig = None
     router_matrix_widget = None
     frame_scroll_area = None
+
+    # Arquivos obrigatórios em um diretório de debug
+    REQUIRED_FILES = ("platform.cfg", "services.cfg", "traffic_router.txt")
 
     # Variável de controle do tema
     is_dark_mode = False
@@ -132,12 +136,23 @@ class MinhaJanela(QMainWindow, MainWindow):
         self.label_2.setText(str(valor))
 
     def open_file(self):
-        self.filePath, _ = QFileDialog.getOpenFileName(
-            self,
-            "Open File",
-            "./",
-            "Config Files (*.cfg);;All Files (*)"
-        )
+        caminho = QFileDialog.getExistingDirectory(self, "Open Debug Directory", "./")
+        if caminho == "":
+            return
+
+        # Verifica se o diretório possui todos os arquivos necessários
+        faltando = [arquivo for arquivo in self.REQUIRED_FILES
+                    if not os.path.isfile(os.path.join(caminho, arquivo))]
+        if faltando:
+            QMessageBox.critical(
+                self,
+                "Invalid Directory",
+                "The selected directory is not a valid debug directory.\n\n"
+                "Missing files:\n" + "\n".join(f"• {arquivo}" for arquivo in faltando)
+            )
+            return
+
+        self.filePath = caminho
         if self.filePath != "":
             self.actionCommunication_Overview.setEnabled(True)
             self.actionDeloream.setEnabled(True)
