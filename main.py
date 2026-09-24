@@ -60,6 +60,7 @@ class MinhaJanela(QMainWindow, MainWindow):
         self.actionCommunication_Overview.triggered.connect(self.open_communication)
         self.actionTask_Mapping_Overview.triggered.connect(self.open_taskmap)
         self.actionTask_List.triggered.connect(self.taskList)
+        self.actionServices_List.triggered.connect(self.servicesList)
 
     # ==========================================
     # LÓGICA DE MUDANÇA DE TEMA
@@ -146,9 +147,9 @@ class MinhaJanela(QMainWindow, MainWindow):
         if faltando:
             QMessageBox.critical(
                 self,
-                "Invalid Directory",
-                "The selected directory is not a valid debug directory.\n\n"
-                "Missing files:\n" + "\n".join(f"• {arquivo}" for arquivo in faltando)
+                "Diretório invalido",
+                "O diretório selecionado não é um diretório de debug valido.\n\n"
+                "Selecione um diretório valido"
             )
             return
 
@@ -211,35 +212,39 @@ class MinhaJanela(QMainWindow, MainWindow):
         self.frame_scroll_area.setWidget(self.router_matrix_widget)
 
     def taskList(self):
-        services_hash = self.mpconfig.get_task_name_hash()
+        task_hash = self.mpconfig.get_task_name_hash()
+        rows = [(task_hash[key], str(key)) for key in sorted(task_hash.keys())]
+        self.task_list_frame = self.create_table_window("Current Task List", ["Task Name", "ID"], rows)
 
-        self.task_list_frame = QWidget()
-        self.task_list_frame.setWindowTitle("Current Task List")
+    def servicesList(self):
+        services_hash = self.mpconfig.get_services_hash()
+        rows = [(services_hash[key], f"{key:X}") for key in sorted(services_hash.keys())]
+        self.services_list_frame = self.create_table_window("Services List", ["Service Name", "ID (Hex)"], rows)
 
-        self.task_list_frame.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
+    def create_table_window(self, title, headers, rows):
+        """Cria e exibe uma janela com uma tabela de duas colunas (nome e ID)."""
+        table_frame = QWidget()
+        table_frame.setWindowTitle(title)
 
-        self.task_list_frame.setGeometry(100, 100, 500, 500)
+        table_frame.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
+
+        table_frame.setGeometry(100, 100, 500, 500)
 
         table_widget = QTableWidget()
-        table_widget.setColumnCount(2)
-        table_widget.setHorizontalHeaderLabels(["Task Name", "ID"])
-        table_widget.setRowCount(len(services_hash))
+        table_widget.setColumnCount(len(headers))
+        table_widget.setHorizontalHeaderLabels(headers)
+        table_widget.setRowCount(len(rows))
 
-        for row, key in enumerate(sorted(services_hash.keys())):
-            task_name = services_hash[key]
-
-            name_item = QTableWidgetItem(task_name)
-            id_item = QTableWidgetItem(str(key))
-
-            table_widget.setItem(row, 0, name_item)
-            table_widget.setItem(row, 1, id_item)
+        for row, values in enumerate(rows):
+            for column, value in enumerate(values):
+                table_widget.setItem(row, column, QTableWidgetItem(value))
 
         layout = QVBoxLayout()
         layout.addWidget(table_widget)
-        self.task_list_frame.setLayout(layout)
+        table_frame.setLayout(layout)
 
-        self.task_list_frame.show()
-
+        table_frame.show()
+        return table_frame
 
 
 class NovaJanela(QWidget, Ui_Form):

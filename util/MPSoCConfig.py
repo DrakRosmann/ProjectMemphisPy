@@ -90,6 +90,8 @@ class MPSoCConfig:
         except FileNotFoundError:
             print("Erro")
 
+        self.initialize_services(debug_file_path + "/services.cfg")
+
     def initialize_task_naming(self, platform_file):
         """Lê as tarefas diretamente do objeto de arquivo aberto."""
         self.task_name_hash = SortedDict()
@@ -116,6 +118,32 @@ class MPSoCConfig:
                     continue
 
 
-    # Método de acesso necessário para compatibilidade com sua interface gráfica
+    def initialize_services(self, services_file_path):
+        """Lê os serviços (nome e código hexadecimal) do arquivo services.cfg."""
+        self.services_hash = SortedDict()
+
+        try:
+            with open(services_file_path, "r", encoding="utf-8") as services_file:
+                for line in services_file:
+                    service_info = line.strip().split()
+
+                    # Ignora linhas vazias e as definições especiais iniciadas com "$"
+                    if len(service_info) < 2 or service_info[0].startswith("$"):
+                        continue
+
+                    try:
+                        service_id = int(service_info[1], 16)
+                    except ValueError:
+                        # Ignora caso o código não seja um hexadecimal válido
+                        continue
+
+                    self.services_hash[service_id] = service_info[0]
+        except FileNotFoundError:
+            print("Erro")
+
+    # Métodos de acesso necessários para compatibilidade com sua interface gráfica
     def get_task_name_hash(self):
         return self.task_name_hash
+
+    def get_services_hash(self):
+        return self.services_hash
