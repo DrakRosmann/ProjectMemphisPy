@@ -32,9 +32,10 @@ import math
 import os
 
 from PySide6.QtCore import QEvent, QObject, QRect, Qt, Signal
-from PySide6.QtGui import QFont, QPainter, QPixmap
+from PySide6.QtGui import QColor, QFont, QImage, QPainter, QPixmap
 from PySide6.QtWidgets import QFrame, QGridLayout, QWidget
 
+import theme
 from Roteador import Ui_Form
 from util.MPSoCConfig import MPSoCConfig
 
@@ -45,9 +46,43 @@ IMAGES_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "images")
 _pixmap_cache: dict[str, QPixmap] = {}
 
 
+def _white_to_alpha(image: QImage) -> QImage:
+    """
+    Remove o fundo branco das imagens das setas (os PNGs não têm canal
+    alfa), para que fiquem legíveis sobre o fundo escuro do modo escuro.
+
+    A cor mais distante do branco é tomada como a cor da seta; os pixels
+    mais claros (fundo e serrilhado da borda) viram essa cor com opacidade
+    proporcional à distância do branco.
+    """
+    image = image.convertToFormat(QImage.Format.Format_ARGB32)
+    width, height = image.width(), image.height()
+
+    def distance(color: QColor) -> int:
+        return 255 - min(color.red(), color.green(), color.blue())
+
+    pixels = [[image.pixelColor(x, y) for x in range(width)] for y in range(height)]
+    base = max((color for row in pixels for color in row), key=distance)
+    base_distance = distance(base) or 1
+
+    for y, row in enumerate(pixels):
+        for x, color in enumerate(row):
+            alpha = distance(color) / base_distance
+            if alpha < 1:
+                faded = QColor(base)
+                faded.setAlphaF(alpha)
+                image.setPixelColor(x, y, faded)
+
+    return image
+
+
 def _pixmap(name: str) -> QPixmap:
     if name not in _pixmap_cache:
-        _pixmap_cache[name] = QPixmap(os.path.join(IMAGES_DIR, name))
+        image = QImage(os.path.join(IMAGES_DIR, name))
+        # As imagens do corpo do roteador são opacas e não têm fundo branco
+        if not name.startswith("Router"):
+            image = _white_to_alpha(image)
+        _pixmap_cache[name] = QPixmap.fromImage(image)
     return _pixmap_cache[name]
 
 
@@ -136,22 +171,30 @@ class _ImagePainter(QObject):
         return super().eventFilter(obj, event)
 
 
-# Cores fixas do roteador, independentes do tema (claro/escuro) que o
-# MainWindow aplica globalmente via QApplication.setPalette(). Sem isso,
-# alternar o tema (Ctrl+T) recolore os widgets internos do roteador (portas,
-# rótulos) porque eles não têm paleta própria e herdam a paleta do app,
-# quebrando a visualização (fundo/texto ficam com a mesma cor, sumindo, ou
-# os pequenos retângulos de porta ficam visíveis onde antes eram
-# transparentes ao fundo).
-_ROUTER_STYLESHEET = """
-QWidget {
-    background-color: #ffffff;
-    color: #000000;
-}
-QLabel {
-    background-color: transparent;
-}
-"""
+def _matrix_stylesheet(dark: bool) -> str:
+    """
+    Folha de estilo da grade inteira (aplicada no RouterMatrixWidget e
+    herdada pelos roteadores). Os rótulos dentro do corpo do roteador são
+    sempre pretos, pois o corpo tem cor clara nos dois temas; o % da porta
+    local fica fora do corpo e acompanha o tema.
+    """
+    colors = theme.matrix_colors(dark)
+    return f"""
+    #routerMatrix {{
+        background-color: {colors.canvas};
+    }}
+    #routerMatrix QLabel {{
+        background-color: transparent;
+        color: #000000;
+    }}
+    #routerMatrix QLabel#local_Label {{
+        color: {colors.text};
+    }}
+    #routerMatrix QFrame[clusterFrame="true"] {{
+        background-color: transparent;
+        border: 1px solid {colors.cluster_border};
+    }}
+    """
 
 
 class RouterWidget(QWidget, Ui_Form):
@@ -200,13 +243,12 @@ class RouterWidget(QWidget, Ui_Form):
         for label_name in set(_PORT_LABELS.values()):
             getattr(self, label_name).setFont(percent_font)
 
-        # Isola este roteador do tema global do app (ver comentário acima
-        # de _ROUTER_STYLESHEET): fixa cores próprias em toda a subárvore,
-        # que não são afetadas por um app.setPalette() posterior.
-        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
-        for child in self.findChildren(QWidget):
-            child.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
-        self.setStyleSheet(_ROUTER_STYLESHEET)
+        # O Roteador.ui fixa fundo branco no Form inteiro; as cores passam a
+        # vir da folha de estilo da matriz (_matrix_stylesheet), que segue o tema
+        self.setStyleSheet("")
+
+        # Mesma posição do Java: acima do corpo do roteador, sem cruzar a borda
+        self.local_Label.setGeometry(QRect(21, 16, 40, 13))
 
         self.reset_arrows()
 
@@ -291,6 +333,10 @@ class RouterMatrixWidget(QWidget):
 
         self.mpsoc_config = mpsoc_config
 
+        # Fundo e cores da grade seguem o tema (ver apply_theme)
+        self.setObjectName("routerMatrix")
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+
         # mpsoc_x/mpsoc_y é o tamanho TOTAL da malha.
         self.total_cols = max(1, mpsoc_x)
         self.total_rows = max(1, mpsoc_y)
@@ -349,13 +395,8 @@ class RouterMatrixWidget(QWidget):
             cluster_frame.setFrameShape(QFrame.Shape.Box)
             cluster_frame.setFrameShadow(QFrame.Shadow.Plain)
             cluster_frame.setLineWidth(1)
-            # Borda do cluster com cor fixa, isolada do tema global (mesmo
-            # motivo do _ROUTER_STYLESHEET: sem isso, o toggle Dark/Light
-            # do MainWindow também recolore essa borda de forma inconsistente).
-            cluster_frame.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
-            cluster_frame.setStyleSheet(
-                "QFrame { background-color: #ffffff; border: 1px solid #808080; }"
-            )
+            # A cor da borda vem da folha de estilo da matriz (_matrix_stylesheet)
+            cluster_frame.setProperty("clusterFrame", True)
 
         cluster_layout = QGridLayout(cluster_frame)
         cluster_layout.setSpacing(0)
@@ -390,6 +431,10 @@ class RouterMatrixWidget(QWidget):
     def get_router(self, x: int, y: int) -> RouterWidget | None:
         """Retorna o RouterWidget na posição global (x, y), se existir."""
         return self.routers.get((x, y))
+
+    def apply_theme(self, dark: bool) -> None:
+        """Aplica as cores do tema claro ou escuro na grade."""
+        self.setStyleSheet(_matrix_stylesheet(dark))
 
     def get_router_by_address(self, router_address: int) -> RouterWidget | None:
         """Retorna o RouterWidget pelo endereço hamiltoniano, se existir."""

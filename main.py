@@ -6,6 +6,7 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QFileDialog, QMessageB
                                QVBoxLayout, QHBoxLayout, QScrollArea, QTableWidgetItem, QTableWidget, QLabel,
                                QHeaderView)
 
+import theme
 from ui_mainwindow import MainWindow
 from commsUi import Ui_Form
 from taskmap import Ui_TaskMap
@@ -40,16 +41,15 @@ class MinhaJanela(QMainWindow, MainWindow):
         # ---------------------------------------------------------
         # Limpa a paleta fixa gerada pelo arquivo .ui para herdar a do App
         self.setPalette(QPalette())
-        self.apply_light_theme(app)
-        self.is_dark_mode = False
-        # Cria uma ação para alternar o tema e adiciona no menu "Edit"
-        self.actionToggle_Theme = QAction("Alternar Tema (Dark/Light)", self)
+
+        # Ação marcável no menu "Edit"; o último tema escolhido é restaurado
+        self.actionToggle_Theme = QAction("Dark Mode", self)
+        self.actionToggle_Theme.setCheckable(True)
         self.actionToggle_Theme.setShortcut(QKeySequence("Ctrl+T"))
         self.menuEdit.addAction(self.actionToggle_Theme)
-        self.actionToggle_Theme.triggered.connect(self.toggle_theme)
+        self.actionToggle_Theme.toggled.connect(self.set_dark_mode)
 
-        # Garante que o aplicativo inicie no modo claro padrão do estilo Fusion
-        self.apply_light_theme(QApplication.instance())
+        self.set_dark_mode(theme.load_dark_mode())
         # ---------------------------------------------------------
 
         self.actionCommunication_Overview.setEnabled(False)
@@ -102,56 +102,21 @@ class MinhaJanela(QMainWindow, MainWindow):
     # LÓGICA DE MUDANÇA DE TEMA
     # ==========================================
     def toggle_theme(self):
-        app = QApplication.instance()
-        if not self.is_dark_mode:
-            self.apply_dark_theme(app)
-            self.is_dark_mode = True
-        else:
-            self.apply_light_theme(app)
-            self.is_dark_mode = False
+        self.set_dark_mode(not self.is_dark_mode)
 
-    def apply_dark_theme(self, app):
-        app.setStyle("Fusion")
-        dark_palette = QPalette()
+    def set_dark_mode(self, dark):
+        """Aplica o tema na aplicação inteira e na grade de roteadores."""
+        self.is_dark_mode = dark
+        theme.apply_theme(dark)
+        theme.save_dark_mode(dark)
 
-        # Configurando as cores do modo escuro
-        dark_palette.setColor(QPalette.ColorRole.Window, QColor(53, 53, 53))
-        dark_palette.setColor(QPalette.ColorRole.WindowText, Qt.GlobalColor.white)
-        dark_palette.setColor(QPalette.ColorRole.Base, QColor(35, 35, 35))
-        dark_palette.setColor(QPalette.ColorRole.AlternateBase, QColor(53, 53, 53))
-        dark_palette.setColor(QPalette.ColorRole.ToolTipBase, QColor(25, 25, 25))
-        dark_palette.setColor(QPalette.ColorRole.ToolTipText, Qt.GlobalColor.white)
-        dark_palette.setColor(QPalette.ColorRole.Text, Qt.GlobalColor.white)
-        dark_palette.setColor(QPalette.ColorRole.Button, QColor(53, 53, 53))
-        dark_palette.setColor(QPalette.ColorRole.ButtonText, Qt.GlobalColor.white)
-        dark_palette.setColor(QPalette.ColorRole.BrightText, Qt.GlobalColor.red)
-        dark_palette.setColor(QPalette.ColorRole.Link, QColor(42, 130, 218))
-        dark_palette.setColor(QPalette.ColorRole.Highlight, QColor(42, 130, 218))
-        dark_palette.setColor(QPalette.ColorRole.HighlightedText, Qt.GlobalColor.black)
+        # Mantém a marcação do menu em sincronia sem disparar o sinal de novo
+        self.actionToggle_Theme.blockSignals(True)
+        self.actionToggle_Theme.setChecked(dark)
+        self.actionToggle_Theme.blockSignals(False)
 
-        # Aplica na aplicação inteira (afeta abas secundárias também)
-        app.setPalette(dark_palette)
-
-    def apply_light_theme(self, app):
-        app.setStyle("Fusion")
-        light_palette = QPalette()
-
-        # Força as cores do modo claro para sobrescrever o tema do Sistema Operacional
-        light_palette.setColor(QPalette.ColorRole.Window, QColor(240, 240, 240))
-        light_palette.setColor(QPalette.ColorRole.WindowText, Qt.GlobalColor.black)
-        light_palette.setColor(QPalette.ColorRole.Base, Qt.GlobalColor.white)
-        light_palette.setColor(QPalette.ColorRole.AlternateBase, QColor(225, 225, 225))
-        light_palette.setColor(QPalette.ColorRole.ToolTipBase, Qt.GlobalColor.white)
-        light_palette.setColor(QPalette.ColorRole.ToolTipText, Qt.GlobalColor.black)
-        light_palette.setColor(QPalette.ColorRole.Text, Qt.GlobalColor.black)
-        light_palette.setColor(QPalette.ColorRole.Button, QColor(240, 240, 240))
-        light_palette.setColor(QPalette.ColorRole.ButtonText, Qt.GlobalColor.black)
-        light_palette.setColor(QPalette.ColorRole.BrightText, Qt.GlobalColor.red)
-        light_palette.setColor(QPalette.ColorRole.Link, QColor(42, 130, 218))
-        light_palette.setColor(QPalette.ColorRole.Highlight, QColor(42, 130, 218))
-        light_palette.setColor(QPalette.ColorRole.HighlightedText, Qt.GlobalColor.white)
-
-        app.setPalette(light_palette)
+        if self.router_matrix_widget is not None:
+            self.router_matrix_widget.apply_theme(dark)
 
     # ==========================================
 
@@ -226,6 +191,7 @@ class MinhaJanela(QMainWindow, MainWindow):
             self.mpconfig.cluster_y,
             mpsoc_config=self.mpconfig,
         )
+        self.router_matrix_widget.apply_theme(self.is_dark_mode)
 
         # Primeira vez: cria um QScrollArea dentro do self.frame para
         # comportar malhas maiores que a área visível da janela.

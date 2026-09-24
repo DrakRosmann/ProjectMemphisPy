@@ -41,6 +41,7 @@ diretório debug/
 |---|---|---|
 | `main.py` | Janela principal: menus, botões, tabelas, ligação com a simulação | `MainFrame.java` |
 | `simulation.py` | Controle da simulação e janelas de checkpoint | `MainFrame.java` (parte de simulação), `CheckpointController.java` |
+| `theme.py` | Paletas dos temas claro/escuro, cores da grade e preferência salva | — |
 | `router_matrix.py` | Desenho da grade e de cada roteador (imagens, setas, %) | `Roteador.java`, `UJPanelImagem.java`, `MainFrame.createNoCPanel` |
 | `util/MPSoCConfig.py` | Leitura de `platform.cfg` e `services.cfg`, constantes e endereçamento | `util/MPSoCConfig.java` |
 | `information/packet_information.py` | Um pacote do `traffic_router.txt` | `PacketInformation.java` |
@@ -239,6 +240,10 @@ Reaproveita o layout do `Roteador.py` (gerado de `Roteador.ui`) e acrescenta:
 
 As imagens (pasta `images/`) são desenhadas pelo `_ImagePainter`, um *event filter* que pinta a imagem esticada sobre os `QWidget` vazios do `.ui`, substituindo o `UJPanelImagem` do Java. As imagens ficam em cache (`_pixmap_cache`).
 
+Os PNGs das setas não têm canal alfa (fundo branco sólido). Ao carregar, `_white_to_alpha` converte o fundo e o serrilhado da borda em transparência, mantendo a cor da seta, para que elas funcionem sobre o fundo escuro. As imagens do corpo do roteador (`Router*.png`) são usadas como estão.
+
+As cores da grade vêm de uma única folha de estilo aplicada no `RouterMatrixWidget` (`apply_theme(dark)`): fundo da área, texto do % da porta local e borda dos clusters seguem o tema; os rótulos dentro do corpo do roteador são sempre pretos, porque o corpo tem cor clara nos dois temas.
+
 ---
 
 ## 8. Simulação — `simulation.py`
@@ -334,7 +339,16 @@ Divide o tempo em janelas de **0,5 ms** (`window_size_ms`). `set_time(ticks)` co
 5. Limpa o campo **Back To**.
 6. Mostra *"The project has been successfully loaded!"*.
 
-### 9.2 Mensagens
+### 9.2 Tema claro/escuro
+
+**Menu:** `Edit → Dark Mode` (Ctrl+T), item marcável.
+
+- `theme.py` define as paletas do Fusion para os dois temas, incluindo as cores de itens **desabilitados** e do texto de *placeholder* (sem elas, botões desabilitados ficavam ilegíveis no modo escuro).
+- `MinhaJanela.set_dark_mode(dark)` aplica a paleta na aplicação inteira, atualiza a marcação do menu e recolore a grade (`RouterMatrixWidget.apply_theme`). Uma grade criada depois (novo debug ou reset) já nasce com o tema atual.
+- A escolha é salva com `QSettings` (organização `GAPH`, aplicação `MemphisGraphicalDebugger`) e restaurada ao abrir o programa.
+- As janelas Communication Overview e Task Mapping mantêm suas cores fixas.
+
+### 9.3 Mensagens
 
 | Situação | Mensagem |
 |---|---|

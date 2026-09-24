@@ -21,9 +21,9 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QGridLayout, QLabel, QSizePolicy, QVBoxLayout, QWidget
 
 
-# Cores fixas, independentes do tema (claro/escuro) do MainWindow — mesmo
-# motivo do _ROUTER_STYLESHEET em router_matrix.py: sem isso, o toggle
-# Dark/Light recoloriaria essas células via QApplication.setPalette().
+# Cores fixas, independentes do tema (claro/escuro) do MainWindow: sem
+# isso, o toggle Dark/Light recoloriria essas células via
+# QApplication.setPalette().
 _SLAVE_STYLESHEET = """
 QWidget#slaveWidget {
     background-color: #0000cc;
