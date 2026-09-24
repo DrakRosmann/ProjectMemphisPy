@@ -1,6 +1,4 @@
 # -*- coding: utf-8 -*-
-import sys
-#from tkinter.tix import Form
 
 ################################################################################
 ## Form generated from reading UI file 'RoteadorjxHyuV.ui'
