@@ -40,7 +40,8 @@ class MinhaJanela(QMainWindow, MainWindow):
         # ---------------------------------------------------------
         # Limpa a paleta fixa gerada pelo arquivo .ui para herdar a do App
         self.setPalette(QPalette())
-
+        self.apply_light_theme(app)
+        self.is_dark_mode = False
         # Cria uma ação para alternar o tema e adiciona no menu "Edit"
         self.actionToggle_Theme = QAction("Alternar Tema (Dark/Light)", self)
         self.actionToggle_Theme.setShortcut(QKeySequence("Ctrl+T"))
@@ -94,6 +95,8 @@ class MinhaJanela(QMainWindow, MainWindow):
         self.update_simulation_time(0)
 
         self.set_simulation_buttons(loaded=False)
+        self.actionReset_Simulation.setEnabled(False)
+        self.actionRest_Graphical_Path.setEnabled(False)
 
     # ==========================================
     # LÓGICA DE MUDANÇA DE TEMA
@@ -274,6 +277,8 @@ class MinhaJanela(QMainWindow, MainWindow):
         self.update_simulation_time(0)
         self.reset_current_packet_table()
         self.set_simulation_buttons(loaded=True)
+        self.actionReset_Simulation.setEnabled(True)
+        self.actionRest_Graphical_Path.setEnabled(True)
 
     def set_simulation_buttons(self, loaded, running=False):
         self.pushButton.setEnabled(loaded and not running)
@@ -304,17 +309,37 @@ class MinhaJanela(QMainWindow, MainWindow):
                                 "It is only possible to go to a time already simulated.")
 
     def reset_simulation(self):
-        """Recarrega o debug atual e volta a simulação para o início."""
+        """
+        Recarrega o debug atual (platform.cfg, services.cfg e traffic_router.txt)
+        e volta a simulação para o início, como o "Reset Simulation" do original.
+        """
         if self.mpconfig is None:
             QMessageBox.warning(self, "Attention", "Please, load a debugging before")
             return
 
         self.stop_simulation()
+
+        # Os arquivos podem ter sido apagados/regerados desde que o debug foi aberto
+        faltando = [arquivo for arquivo in self.REQUIRED_FILES
+                    if not os.path.isfile(os.path.join(self.filePath, arquivo))]
+        if faltando:
+            QMessageBox.critical(
+                self,
+                "Reset Simulation",
+                "Não foi possível resetar a simulação. Arquivos não encontrados:\n"
+                + "\n".join(f"• {arquivo}" for arquivo in faltando)
+            )
+            return
+
         self.mpconfig = MPSoCConfig.MPSoCConfig(self.filePath)
-        self.mpsoc_information.close()
+        if self.mpsoc_information is not None:
+            self.mpsoc_information.close()
         self.mpsoc_information = MPSoCInformation(self.mpconfig)
         self.build_router_matrix()
         self.start_simulation()
+        self.lineEdit.clear()
+
+        QMessageBox.information(self, "Reset Simulation", "Simulação recarregada com sucesso!")
 
     def reset_graphical_path(self):
         if self.simulation is None:
