@@ -3,13 +3,16 @@ import sys
 
 from PySide6.QtGui import Qt, QPalette, QColor, QAction, QKeySequence
 from PySide6.QtWidgets import (QApplication, QMainWindow, QFileDialog, QMessageBox, QWidget,
-                               QVBoxLayout, QScrollArea, QTableWidgetItem, QTableWidget)
+                               QVBoxLayout, QHBoxLayout, QScrollArea, QTableWidgetItem, QTableWidget, QLabel,
+                               QHeaderView)
 
 from ui_mainwindow import MainWindow
 from commsUi import Ui_Form
 from taskmap import Ui_TaskMap
 from util import MPSoCConfig
+from information import MPSoCInformation
 from router_matrix import RouterMatrixWidget
+from simulation import SimulationController, MAX_REPAINT_SPEED, ticks_to_ms
 from slave_matrix import SlaveMatrixWidget
 from pe_matrix import PEMatrixWidget
 
@@ -17,8 +20,10 @@ from pe_matrix import PEMatrixWidget
 class MinhaJanela(QMainWindow, MainWindow):
     filePath = ""
     mpconfig = None
+    mpsoc_information = None
     router_matrix_widget = None
     frame_scroll_area = None
+    simulation = None
 
     # Arquivos obrigatórios em um diretório de debug
     REQUIRED_FILES = ("platform.cfg", "services.cfg", "traffic_router.txt")
@@ -61,6 +66,34 @@ class MinhaJanela(QMainWindow, MainWindow):
         self.actionTask_Mapping_Overview.triggered.connect(self.open_taskmap)
         self.actionTask_List.triggered.connect(self.taskList)
         self.actionServices_List.triggered.connect(self.servicesList)
+
+        # ---------------------------------------------------------
+        # CONTROLE DA SIMULAÇÃO
+        # ---------------------------------------------------------
+        self.horizontalSlider.setRange(0, 100)
+        self.horizontalSlider.setValue(MAX_REPAINT_SPEED)
+
+        self.pushButton_2.clicked.connect(self.next_packet)       # >||
+        self.pushButton.clicked.connect(self.play_simulation)     # >
+        self.pushButton_3.clicked.connect(self.stop_simulation)   # STOP
+        self.toolButton.setText("Go")
+        self.toolButton.clicked.connect(self.go_to_time)
+        self.lineEdit.setPlaceholderText("Time in ticks")
+        self.lineEdit.returnPressed.connect(self.go_to_time)
+        self.actionReset_Simulation.triggered.connect(self.reset_simulation)
+        self.actionRest_Graphical_Path.triggered.connect(self.reset_graphical_path)
+
+        # Tabela "Current Packet Information" com uma única linha
+        self.tableWidget.setRowCount(1)
+        self.tableWidget.verticalHeader().setVisible(False)
+        self.tableWidget.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.reset_current_packet_table()
+
+        # Tempo de simulação exibido na caixa "Speed Control"
+        self.build_speed_control()
+        self.update_simulation_time(0)
+
+        self.set_simulation_buttons(loaded=False)
 
     # ==========================================
     # LÓGICA DE MUDANÇA DE TEMA
@@ -135,6 +168,8 @@ class MinhaJanela(QMainWindow, MainWindow):
 
     def update_slide(self, valor):
         self.label_2.setText(str(valor))
+        if self.simulation is not None:
+            self.simulation.set_speed(valor)
 
     def open_file(self):
         caminho = QFileDialog.getExistingDirectory(self, "Open Debug Directory", "./")
@@ -163,7 +198,13 @@ class MinhaJanela(QMainWindow, MainWindow):
             self.actionTask_List.setEnabled(True)
 
             self.mpconfig = MPSoCConfig.MPSoCConfig(self.filePath)
+
+            # Fecha o traffic_router.txt do debug anterior antes de abrir o novo
+            if self.mpsoc_information is not None:
+                self.mpsoc_information.close()
+            self.mpsoc_information = MPSoCInformation(self.mpconfig)
             self.build_router_matrix()
+            self.start_simulation()
 
     def build_router_matrix(self):
         """
@@ -180,6 +221,7 @@ class MinhaJanela(QMainWindow, MainWindow):
             self.mpconfig.mpsoc_y,
             self.mpconfig.cluster_x,
             self.mpconfig.cluster_y,
+            mpsoc_config=self.mpconfig,
         )
 
         # Primeira vez: cria um QScrollArea dentro do self.frame para
@@ -211,6 +253,143 @@ class MinhaJanela(QMainWindow, MainWindow):
         self.router_matrix_widget.adjustSize()
         self.frame_scroll_area.setWidget(self.router_matrix_widget)
 
+    # ==========================================
+    # SIMULAÇÃO DOS ROTEADORES
+    # ==========================================
+    def start_simulation(self):
+        """Cria o controlador da simulação para o debug carregado (ou recarregado)."""
+        if self.simulation is not None:
+            self.simulation.stop()
+            self.simulation.deleteLater()
+
+        self.simulation = SimulationController(self.mpconfig, self.mpsoc_information,
+                                               self.router_matrix_widget, self)
+        self.simulation.set_speed(self.horizontalSlider.value())
+        self.simulation.time_changed.connect(self.update_simulation_time)
+        self.simulation.packet_changed.connect(self.update_current_packet_table)
+        self.simulation.running_changed.connect(self.on_simulation_running_changed)
+        self.simulation.finished.connect(self.on_simulation_finished)
+        self.simulation.unknown_service.connect(self.on_unknown_service)
+
+        self.update_simulation_time(0)
+        self.reset_current_packet_table()
+        self.set_simulation_buttons(loaded=True)
+
+    def set_simulation_buttons(self, loaded, running=False):
+        self.pushButton.setEnabled(loaded and not running)
+        self.pushButton_2.setEnabled(loaded and not running)
+        self.pushButton_3.setEnabled(loaded and running)
+        self.toolButton.setEnabled(loaded and not running)
+        self.lineEdit.setEnabled(loaded and not running)
+
+    def play_simulation(self):
+        if self.simulation is not None:
+            self.simulation.play()
+
+    def stop_simulation(self):
+        if self.simulation is not None:
+            self.simulation.stop()
+
+    def next_packet(self):
+        if self.simulation is not None:
+            self.simulation.step()
+
+    def go_to_time(self):
+        if self.simulation is None:
+            return
+        try:
+            self.simulation.go_to_time(int(self.lineEdit.text()))
+        except ValueError:
+            QMessageBox.warning(self, "Attention", "Enter only numbers and valid times!\n\n"
+                                "It is only possible to go to a time already simulated.")
+
+    def reset_simulation(self):
+        """Recarrega o debug atual e volta a simulação para o início."""
+        if self.mpconfig is None:
+            QMessageBox.warning(self, "Attention", "Please, load a debugging before")
+            return
+
+        self.stop_simulation()
+        self.mpconfig = MPSoCConfig.MPSoCConfig(self.filePath)
+        self.mpsoc_information.close()
+        self.mpsoc_information = MPSoCInformation(self.mpconfig)
+        self.build_router_matrix()
+        self.start_simulation()
+
+    def reset_graphical_path(self):
+        if self.simulation is None:
+            QMessageBox.warning(self, "Attention", "Please, load a debugging before")
+            return
+        self.simulation.reset_graphical_path()
+
+    def on_simulation_running_changed(self, running):
+        self.set_simulation_buttons(loaded=True, running=running)
+
+    def on_simulation_finished(self):
+        self.statusbar.showMessage("End of traffic_router.txt reached", 5000)
+
+    def on_unknown_service(self, packet):
+        if self.mpconfig.router_addressing == MPSoCConfig.MPSoCConfig.XY:
+            router = self.mpconfig.ham_address_to_xy_label(packet.router_address)
+        else:
+            router = str(packet.router_address)
+
+        QMessageBox.critical(self, "Error",
+                             f"ERROR: Service <{packet.service}> packet unidentified.\n"
+                             f"Router: {router} Input port: {packet.get_input_port_string()}")
+
+    def build_speed_control(self):
+        """
+        Reorganiza a caixa "Speed Control" igual ao debugger original:
+        velocidade no canto superior direito, slider no meio e, embaixo,
+        o tempo de simulação em ms (esquerda) e em ticks (direita).
+        """
+        for widget in (self.horizontalSlider, self.label_2, self.label):
+            self.horizontalLayout_4.removeWidget(widget)
+
+        # O antigo rótulo fixo "Ticks" passa a mostrar os ticks da simulação
+        self.simulation_ticks_label = self.label
+        self.simulation_time_label = QLabel(self.groupBox_2)
+
+        speed_row = QHBoxLayout()
+        speed_row.addStretch()
+        speed_row.addWidget(self.label_2)
+
+        time_row = QHBoxLayout()
+        time_row.addWidget(self.simulation_time_label)
+        time_row.addStretch()
+        time_row.addWidget(self.simulation_ticks_label)
+
+        speed_layout = QVBoxLayout()
+        speed_layout.setSpacing(0)
+        speed_layout.addLayout(speed_row)
+        speed_layout.addWidget(self.horizontalSlider)
+        speed_layout.addLayout(time_row)
+        self.horizontalLayout_4.addLayout(speed_layout)
+
+    def update_simulation_time(self, ticks):
+        clock_period = self.mpconfig.clock_period_in_ns if self.mpconfig else 0
+        self.simulation_time_label.setText(f"{ticks_to_ms(ticks, clock_period):.5f} ms")
+        self.simulation_ticks_label.setText(f"{ticks} ticks")
+
+    def update_current_packet_table(self, packet):
+        if self.mpconfig.router_addressing == MPSoCConfig.MPSoCConfig.HAMILTONIAN:
+            source = str(packet.router_address)
+            target = str(packet.target_router)
+        else:
+            source = self.mpconfig.ham_address_to_xy_label(packet.router_address)
+            target = self.mpconfig.ham_address_to_xy_label(packet.target_router)
+
+        values = (source, target,
+                  self.mpconfig.get_string_service_name(packet.service),
+                  f"{packet.size} | {packet.bandwidth_cycles}")
+        for column, value in enumerate(values):
+            self.tableWidget.setItem(0, column, QTableWidgetItem(value))
+
+    def reset_current_packet_table(self):
+        for column in range(self.tableWidget.columnCount()):
+            self.tableWidget.setItem(0, column, QTableWidgetItem("-"))
+
     def taskList(self):
         task_hash = self.mpconfig.get_task_name_hash()
         rows = [(task_hash[key], str(key)) for key in sorted(task_hash.keys())]
@@ -218,8 +397,8 @@ class MinhaJanela(QMainWindow, MainWindow):
 
     def servicesList(self):
         services_hash = self.mpconfig.get_services_hash()
-        rows = [(services_hash[key], f"{key:X}") for key in sorted(services_hash.keys())]
-        self.services_list_frame = self.create_table_window("Services List", ["Service Name", "ID (Hex)"], rows)
+        rows = [(services_hash[key], str(key)) for key in sorted(services_hash.keys())]
+        self.services_list_frame = self.create_table_window("Services List", ["Service Name", "ID"], rows)
 
     def create_table_window(self, title, headers, rows):
         """Cria e exibe uma janela com uma tabela de duas colunas (nome e ID)."""
