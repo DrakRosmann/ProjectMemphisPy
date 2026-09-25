@@ -13,9 +13,10 @@ Este documento descreve as funcionalidades portadas do [GraphicalDebugger origin
 7. [Matriz de roteadores — `router_matrix.py`](#7-matriz-de-roteadores--router_matrixpy)
 8. [Simulação — `simulation.py`](#8-simulação--simulationpy)
 9. [Interface da simulação — `main.py`](#9-interface-da-simulação--mainpy)
-10. [Diferenças e correções em relação ao Java](#10-diferenças-e-correções-em-relação-ao-java)
-11. [Limitações e próximos passos](#11-limitações-e-próximos-passos)
-12. [Como testar](#12-como-testar)
+10. [Communication Overview, Task Mapping e Message Log — `overview_windows.py`](#10-communication-overview-task-mapping-e-message-log--overview_windowspy)
+11. [Diferenças e correções em relação ao Java](#11-diferenças-e-correções-em-relação-ao-java)
+12. [Limitações e próximos passos](#12-limitações-e-próximos-passos)
+13. [Como testar](#13-como-testar)
 
 ---
 
@@ -41,6 +42,20 @@ diretório debug/
 |---|---|---|
 | `main.py` | Janela principal: menus, botões, tabelas, ligação com a simulação | `MainFrame.java` |
 | `simulation.py` | Controle da simulação e janelas de checkpoint | `MainFrame.java` (parte de simulação), `CheckpointController.java` |
+| `overview_windows.py` | Janelas Communication Overview, Task Mapping Overview e Message Log, atualizadas durante a simulação | `CommunicationOverview.java`, `TaskMappingFrame.java`, `MainFrame.showMessageList` |
+| `slave_matrix.py` / `pe_matrix.py` | Células das grades das duas janelas acima | — |
+| `router_info_window.py` | Janela "Router Information" (clique num roteador): abas Log, Applications, Scheduling e Traffic, janela Task Information e gráfico de escalonamento | `RouterInfoFrame.java`, `PETextLog.java`, `SchedulingTab.java`, `scheduling/SchedulingPanel.java`, `TaskInfoFrame.java` |
+| `platform_setup.py` | Janela Platform Setup (menu Edit): flit size, período de clock e largura da janela de checkpoint | `PlatformSetupFrame.java` |
+| `filter_window.py` | Janela Service and PE Filter (menu Filters, Ctrl+F): escolhe quais pacotes a simulação processa, por serviço (Only/Except) e por PE | `FilterForm.java` |
+| `projects.py` | Projetos salvos (`.hdf`): File → Save / Open / Delete Project | `MainFrame.java` (save/open/deleteMenuItem) |
+| `help_dialogs.py` | Help → About e Help → Packet Format | `util/AboutFrame.java`, `MainFrame.packetFormatMenuItemActionPerformed` |
+| `analysis.py` | Análises sem interface: aplicação de cada pacote, latência (casamento injeção → entrega), vazão em Mbps e linha do tempo da admissão de aplicações | — (métricas do artigo do Memphis, DAES 2019) |
+| `statistics_windows.py` | Janelas Traffic Statistics (Links, Applications, Messages, Routing, Blocked) e Application Timeline (menu Tools) | — |
+| `path_view.py` | Liga as janelas de análise à malha principal: duplo clique num pacote pinta o caminho dele e destaca o roteador | — |
+| `testcase_files.py` | Leitura dos periféricos do YAML do testcase (`<testcase>/<testcase>.yaml`, seção `hw → Peripherals`) | — |
+| `export.py` | Exportação de tabelas em CSV e de janelas/gráficos em PNG (botões e menu do botão direito) | — |
+| `tests/` | Testes automatizados (pytest), com o cenário extraído do `DEBUG EXAMPLE.zip` | — |
+| `deloream.py` | Deloream: leitor das mensagens `$$$` das tarefas nos logs dos processadores | `deloream/DeloreamMainFrame.java`, `deloream/TaskMessage.java` |
 | `theme.py` | Paletas dos temas claro/escuro, cores da grade e preferência salva | — |
 | `router_matrix.py` | Desenho da grade e de cada roteador (imagens, setas, %) | `Roteador.java`, `UJPanelImagem.java`, `MainFrame.createNoCPanel` |
 | `util/MPSoCConfig.py` | Leitura de `platform.cfg` e `services.cfg`, constantes e endereçamento | `util/MPSoCConfig.java` |
@@ -346,7 +361,7 @@ Divide o tempo em janelas de **0,5 ms** (`window_size_ms`). `set_time(ticks)` co
 - `theme.py` define as paletas do Fusion para os dois temas, incluindo as cores de itens **desabilitados** e do texto de *placeholder* (sem elas, botões desabilitados ficavam ilegíveis no modo escuro).
 - `MinhaJanela.set_dark_mode(dark)` aplica a paleta na aplicação inteira, atualiza a marcação do menu e recolore a grade (`RouterMatrixWidget.apply_theme`). Uma grade criada depois (novo debug ou reset) já nasce com o tema atual.
 - A escolha é salva com `QSettings` (organização `GAPH`, aplicação `MemphisGraphicalDebugger`) e restaurada ao abrir o programa.
-- As janelas Communication Overview e Task Mapping mantêm suas cores fixas.
+- As células das janelas Communication Overview e Task Mapping mantêm suas cores próprias (mapa de calor e cores das aplicações); o restante da janela segue o tema.
 
 ### 9.3 Mensagens
 
@@ -359,7 +374,97 @@ Divide o tempo em janelas de **0,5 ms** (`window_size_ms`). `set_time(ticks)` co
 
 ---
 
-## 10. Diferenças e correções em relação ao Java
+## 10. Communication Overview, Task Mapping e Message Log — `overview_windows.py`
+
+**Menus:** `Tools → Communication Overview`, `Tools → Task Mapping Overview` e `Tools → Message Log`
+
+As três janelas mostram o estado da simulação **até o tempo atual** e se atualizam sozinhas enquanto ela avança (play, `>||`, **Back To**).
+
+### 10.1 Atualização durante a simulação (`_LiveOverview`)
+
+- A janela se conecta ao sinal `time_changed` do `SimulationController` e só **marca** que os dados mudaram.
+- Um `QTimer` redesenha no máximo a cada **500 ms** (`REFRESH_INTERVAL_MS`), e só se a janela estiver visível e houver mudança. Assim o modo rápido (velocidade 99–100) não é travado pelas janelas abertas. No Java era uma `Thread` com `sleep(1000)`.
+- Abrir o menu de novo com a janela já aberta só a traz para frente (não cria outra).
+- **New Debugging** e **Reset Simulation** chamam `set_information(...)` nas janelas abertas: elas recriam a grade e passam a seguir o novo debug/controlador.
+
+### 10.2 Communication Overview (`CommunicationOverviewWindow`)
+
+Mapa de calor do tráfego acumulado em cada roteador.
+
+| Controle | Efeito |
+|---|---|
+| **All Services** (padrão) | Considera todos os serviços; desabilita os filtros abaixo |
+| Lista de serviços | Considera só o serviço escolhido |
+| **Global** | % = tráfego do serviço no roteador / tráfego do serviço em toda a NoC |
+| **All traffic** | % = tráfego do serviço no roteador / todo o tráfego da NoC |
+| **Router** | % = tráfego do serviço no roteador / todo o tráfego do próprio roteador |
+| **Volume** (padrão) / **Bandwidth** | Mede em flits (`size + 1`) ou em ciclos de enlace |
+
+- Cada célula mostra o tipo do PE (`Global M`, `Cluster M`, `Slave`), o rótulo do roteador, a porcentagem com 3 casas e a unidade (`flits`/`cycles`).
+- Cor: mesma escala do Java, matiz HSB de `0.65` (azul, 0%) até `0` (vermelho, 100%), saturação 1 e brilho 0.8. A barra **Color Length** mostra a escala.
+- **Statistics:** roteador com a maior porcentagem (**Bigger**), média entre todos os roteadores (**Average**) e roteador com a menor (**Small**).
+- O fundo da célula é desenhado em `SlaveWidget.paintEvent` (trocar a folha de estilo do próprio widget não repintava o fundo).
+
+### 10.3 Task Mapping Overview (`TaskMappingWindow`)
+
+Tarefas de cada PE, montadas a partir dos eventos de `RouterInformation.get_tasks_information()`:
+
+- `ALLOCATED` → **RUN**, `TERMINATED` → **TER** (vale o último evento de cada tarefa).
+- Cada tarefa aparece como `nome  ID  STATUS`; o nome vem do `platform.cfg` (`BEGIN_task_name_relation`) ou, se não existir, `app  tarefa`.
+- Cor por aplicação (`task_id >> 8`), sorteada com semente fixa (20, como no Java), então cada aplicação mantém a cor. O texto fica preto ou branco conforme a claridade do fundo.
+
+| Controle | Efeito |
+|---|---|
+| **All tasks status** | Todas as tarefas |
+| **Only Running** (padrão) | Só as que estão rodando |
+| **Only Terminated** | Só as terminadas (o `.ui` repetia "All tasks status" neste botão) |
+| **Updating / Update** | Ligado: atualiza sozinho. Desligado: congela a visão; ao religar, atualiza na hora |
+| **Without Task ID** | Esconde o ID numérico (no Java a opção existia, mas o botão não atualizava a tela) |
+
+Se o `platform.cfg` não tiver nomes de tarefas, a janela avisa uma vez que os IDs serão mostrados como números.
+
+### 10.4 Message Log (`MessageLogWindow`)
+
+Lista (500×600, como no original) das mensagens entre PEs, na ordem do `traffic_router.txt`:
+
+| Condição do pacote | Linha |
+|---|---|
+| Entrou pela porta `LOCAL0`/`LOCAL1` (saindo do PE) | `---->>> <origem> send message to <destino> service <SERVIÇO>` |
+| `router_address == target_router` (chegou ao destino) | `<<<---- <destino> receive message with service  <SERVIÇO>` |
+
+Se as duas condições valem (mensagem para o próprio PE), fica a linha de recebimento, como no Java.
+
+- Mostra todos os pacotes **já lidos** e acrescenta os novos conforme a simulação avança. Voltar no tempo não apaga linhas, pois os pacotes continuam lidos (mesmo comportamento do original).
+- A lista acompanha o fim automaticamente, a menos que o usuário tenha rolado para cima.
+- Os roteadores aparecem como `XxY` com endereçamento XY (o Java mostrava o endereço hamiltoniano numérico) ou pelo número com endereçamento HAMILTONIAN, igual ao resto da interface.
+
+### 10.5 Deloream (`deloream.py`)
+
+**Menu:** `Tools → Deloream` — *Debug Log Reader for MPSoCs*. Janela independente (800×700) que lê a pasta do cenário, a que contém o diretório `debug/` aberto (`MPSoCConfig.get_testcase_path()`):
+
+```
+<cenário>/
+ ├─ debug/platform.cfg   nomes das tarefas (BEGIN_task_name_relation) e das aplicações (BEGIN_app_name_relation)
+ └─ log/log<X>x<Y>.txt   saída de cada processador
+```
+
+- **Árvore** `Applications → aplicação[id] → tarefa[id]`; a tarefa pertence à aplicação `id >> 8`.
+- **Duplo clique** (ou Enter) numa tarefa: procura em todos os arquivos de `log/` as linhas no formato
+
+  ```
+  $$$_<processador>_<app>_<tarefa>_<mensagem>
+  ```
+
+  com a aplicação e a tarefa escolhidas, e mostra as mensagens agrupadas por processador (`-- Processor: 1x1`), na ordem dos arquivos e das linhas.
+- Sem mensagens (ou sem a pasta `log/`): *"Log file not created yet or no message found!"* em vermelho.
+- **Options → New testcase** (Ctrl+N) abre outro cenário; **Reload** (F5) relê o `platform.cfg`; **Exit** (Ctrl+E) fecha só a janela.
+- Abrir o menu de novo reaproveita a janela; se o debug carregado for de outro cenário, a árvore é recarregada.
+
+Classes/funções: `TaskMessage.parse(line)`, `read_name_relations(platform_path)`, `read_task_messages(log_dir, app_id, task_id)` e `DeloreamWindow`.
+
+---
+
+## 11. Diferenças e correções em relação ao Java
 
 | Local | Java | Python |
 |---|---|---|
@@ -375,20 +480,36 @@ Divide o tempo em janelas de **0,5 ms** (`window_size_ms`). `set_time(ticks)` co
 | Thread de simulação | `Thread` + `sleep()` alterando a interface | `QTimer` na thread principal |
 | Getters/setters | Métodos `getX()`/`setX()` | Atributos e `dataclass` |
 | `TaskInformation.remote_task_id` | `0` quando ausente | `-1` quando ausente |
+| Task Mapping: atualização | `Thread` recriando todos os painéis a cada 1 s | `QTimer` que só redesenha se chegou pacote novo, reaproveitando os widgets |
+| Task Mapping: ordem das tarefas | Ordem do `HashMap` (aleatória) | Ordenadas pelo ID |
+| Task Mapping: cor do texto | Sempre preto (ilegível em cores escuras) | Preto ou branco conforme o fundo |
+| Communication Overview: atualização | Calculado só ao abrir ou ao mudar um filtro | Acompanha a simulação |
+| Deloream: mensagem | Juntava as partes sem os `_` (`valor_de_x` virava `valordex`) | Mantém a mensagem inteira |
+| Deloream: busca | Procurava `_app_tarefa_` em qualquer ponto da linha (podia casar com o texto da mensagem) | Compara os campos de aplicação e tarefa |
+| Deloream: Exit / New testcase | `Exit` fechava o debugger inteiro (`System.exit`); `New testcase` lia um caminho `null` | Fecha só a janela; abre um seletor de pasta |
+| `get_testcase_path` | Cortava o caminho na primeira ocorrência de "debug" (quebrava em pastas como `debugger/`) | Pasta pai do diretório `debug` |
+| Message Log | Retrato dos pacotes lidos no momento em que a janela abria; endereço hamiltoniano | Acrescenta as mensagens novas durante a simulação; endereço `XxY` com endereçamento XY |
 
 ---
 
-## 11. Limitações e próximos passos
+## 12. Limitações e próximos passos
 
 - **Back To** só vai até tempos já simulados (mesmo comportamento do Java).
-- **Filtro de serviços/PEs** (`Filters → Service and PE Filter`): ainda não implementado. O controlador já aceita `SimulationController.packet_filter`.
-- **Janela de informações do roteador** (`RouterInfoFrame`): o `RouterWidget` já emite `clicked(router_address)`, falta a janela.
-- **Communication Overview**, **Task Mapping Overview** e **Message Log** ainda não usam os dados do `MPSoCInformation`.
-- O relatório de uso de link por roteador (`printRouterTotalLinkUsage`, oculto no Java) não foi portado.
+- **Latência e caminho dos pacotes** (Tools → Traffic Statistics): o `traffic_router.txt` não tem ID de pacote e os campos de tarefa podem mudar entre os hops de um mesmo pacote. Cada pacote é seguido hop a hop por serviço, tamanho, roteador vizinho (pela porta de entrada) e tempo; as tarefas da injeção definem a aplicação. No exemplo, 1 388 de 1 388 pacotes são entregues e todos os que têm hops são seguidos pelo caminho inteiro. A latência é só a da rede (sem o tempo do kernel).
+- **Validação do roteamento** (aba Routing): cada registro intermediário é conferido contra o XY (primeiro X, depois Y). Serviços com muitos registros fora do XY não são tratados como erro, e sim listados como não-XY: no Memphis-V são os serviços 0–3 do canal LOW, que se espalham pela malha inteira (inundação da rede de gerência).
+- **Pacotes parados e deadlock** (aba Blocked): lista os pacotes em trânsito sem avançar há N ciclos e procura espera circular (cada pacote esperando o enlace ocupado pelo seguinte). Com XY não deveria haver ciclo.
+- **Ordem do `traffic_router.txt`**: o arquivo não está estritamente em ordem de tempo (a linha de um pacote longo pode ser gravada depois de registros mais novos). O **Back To** usa busca binária pelo tempo e herda essa pequena imprecisão do Java.
+- **Caminho do pacote na malha**: duplo clique nas abas Messages, Routing e Blocked (Traffic Statistics) ou na tabela de pacotes do gráfico de escalonamento pinta o caminho registrado na janela principal e destaca o roteador (destino, onde parou ou onde violou o XY). A simulação é parada para o desenho não ser apagado; `File → Reset Graphical Path` limpa.
+- **Escalonamento × pacotes**: clicar num trecho do gráfico de escalonamento lista os pacotes que o PE recebeu (entregues até 100 ciclos antes do trecho ou durante ele) e enviou (injetados durante ele) — ex.: o pacote que causou uma interrupção.
+- **Periféricos**: os nomes vêm do YAML do testcase, lido linha a linha (sem PyYAML). Sem o YAML, a borda é marcada como "Peripheral" quando passa o primeiro pacote vindo de fora da malha.
+- **Follow Live Trace** (`File`): no fim do `traffic_router.txt` a simulação não para; tenta ler novas linhas a cada 250 ms. Uma linha sem `\n` no fim é considerada incompleta e só é lida depois de terminar de ser gravada. A Application Timeline e as análises do trace inteiro são atualizadas com **Reload**.
+- **Registros sem destino na malha**: `TASK_TERMINATED` de tamanho 0 com destino -1 é um aviso do kernel na porta local, não um pacote; é ignorado nas estatísticas.
+- **Application Timeline**: o pedido, o mapeamento, a liberação e o término das aplicações vêm das mensagens do `mapper_task` no log (`log/log<X>x<Y>.txt`). Sem esse log, só aparecem a chegada do código e o término das tarefas.
+- **Término de tarefa**: no Memphis-V o `TASK_TERMINATED` traz a tarefa no último campo (o Java lia o penúltimo, do formato do HeMPS, e as tarefas nunca apareciam como terminadas). Corrigido em `RouterInformation`.
 
 ---
 
-## 12. Como testar
+## 13. Como testar
 
 1. Extraia o `DEBUG EXAMPLE.zip`.
 2. Execute `uv run main.py` (ou `.venv/bin/python main.py`).
@@ -396,5 +517,15 @@ Divide o tempo em janelas de **0,5 ms** (`window_size_ms`). `set_time(ticks)` co
 4. Use `>||` para avançar pacote a pacote, `>` para rodar e o slider para a velocidade (99–100 = modo rápido).
 5. Digite um tempo já simulado em **Back To** e clique em **Go**.
 6. `File → Reset Simulation` volta ao início.
+7. Abra `Tools → Communication Overview`, `Tools → Task Mapping Overview` e `Tools → Message Log` e rode a simulação: as porcentagens, as tarefas e as mensagens mudam conforme os pacotes avançam (2 755 mensagens ao fim do exemplo).
+
+### Testes automatizados
+
+```
+uv sync            # instala também o pytest (grupo dev)
+uv run pytest      # ~4 s
+```
+
+Os testes rodam sem tela (Qt offscreen), extraem o cenário do `DEBUG EXAMPLE.zip` e usam QSettings e pasta de projetos temporárias. O workflow `.github/workflows/build.yml` roda os testes antes de gerar o executável.
 
 Resultados esperados com o exemplo: 3 101 pacotes, último pacote em 6 251 176 ticks (62,51176 ms com clock de 10 ns), 42 serviços e 11 tarefas.

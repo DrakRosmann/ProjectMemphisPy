@@ -18,17 +18,16 @@ slave "0x0" fica no canto inferior esquerdo e o eixo Y cresce para cima.
 """
 
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QColor, QPainter, QPen
 from PySide6.QtWidgets import QGridLayout, QLabel, QSizePolicy, QVBoxLayout, QWidget
 
 
 # Cores fixas, independentes do tema (claro/escuro) do MainWindow: sem
 # isso, o toggle Dark/Light recoloriria essas células via
 # QApplication.setPalette().
+# O fundo (cor do mapa de calor) é pintado em paintEvent, pois muda a
+# cada atualização da simulação.
 _SLAVE_STYLESHEET = """
-QWidget#slaveWidget {
-    background-color: #0000cc;
-    border: 1px solid #ffffff;
-}
 QLabel {
     background-color: transparent;
     color: #ffffff;
@@ -56,8 +55,8 @@ class SlaveWidget(QWidget):
 
         # Isola a célula do tema global do app (ver comentário de
         # _SLAVE_STYLESHEET acima).
-        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.setStyleSheet(_SLAVE_STYLESHEET)
+        self._background = QColor("#0000cc")
 
         # Cresce para preencher toda a área do scrollArea, como no print
         # (diferente do RouterWidget, que tem tamanho fixo 170x170).
@@ -88,6 +87,26 @@ class SlaveWidget(QWidget):
         layout.addWidget(self.flits_label)
 
         self.setLayout(layout)
+
+    def _set_background(self, color: QColor) -> None:
+        if color != self._background:
+            self._background = QColor(color)
+            self.update()
+
+    def paintEvent(self, event):
+        # Fundo com a cor do mapa de calor e borda preta de 1 px
+        painter = QPainter(self)
+        painter.fillRect(self.rect(), self._background)
+        painter.setPen(QPen(QColor("#000000"), 1))
+        painter.drawRect(self.rect().adjusted(0, 0, -1, -1))
+        painter.end()
+
+    def set_values(self, title: str, value: str, unit: str, background: QColor) -> None:
+        """Atualiza a célula com os dados do mapa de calor do Communication Overview."""
+        self.title_label.setText(title)
+        self.percent_label.setText(value)
+        self.flits_label.setText(unit)
+        self._set_background(background)
 
     def set_traffic(self, percent: float, flits: int | None = None) -> None:
         """
