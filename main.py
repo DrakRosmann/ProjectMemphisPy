@@ -2,7 +2,7 @@ import os
 import sys
 
 from PySide6.QtGui import Qt, QPalette, QColor, QAction, QKeySequence
-from PySide6.QtWidgets import (QApplication, QMainWindow, QFileDialog, QMessageBox, QWidget,
+from PySide6.QtWidgets import (QApplication, QMainWindow, QFileDialog, QMessageBox, QWidget, QInputDialog,
                                QVBoxLayout, QHBoxLayout, QScrollArea, QTableWidgetItem, QTableWidget, QLabel,
                                QHeaderView)
 
@@ -14,6 +14,11 @@ from router_matrix import RouterMatrixWidget
 from simulation import SimulationController, MAX_REPAINT_SPEED, ticks_to_ms
 from overview_windows import CommunicationOverviewWindow, MessageLogWindow, TaskMappingWindow
 from deloream import DeloreamWindow
+from router_info_window import RouterInfoWindow
+from platform_setup import PlatformSetupDialog
+from filter_window import FilterWindow
+from help_dialogs import AboutDialog, show_packet_format
+import projects
 
 
 class MinhaJanela(QMainWindow, MainWindow):
@@ -27,6 +32,11 @@ class MinhaJanela(QMainWindow, MainWindow):
     task_mapping_window = None
     message_log_window = None
     deloream_window = None
+    router_info_windows = None
+    simulation_ticks = 0
+    filter_window = None
+
+    WINDOW_TITLE = "Memphis-V Graphical Debugger"
 
     # Arquivos obrigatórios em um diretório de debug
     REQUIRED_FILES = ("platform.cfg", "services.cfg", "traffic_router.txt")
@@ -37,6 +47,7 @@ class MinhaJanela(QMainWindow, MainWindow):
     def __init__(self):
         super().__init__()
         self.setupUi(self)
+        self.setWindowTitle(self.WINDOW_TITLE)
 
         # ---------------------------------------------------------
         # SISTEMA DE TEMA (DARK/LIGHT MODE)
@@ -61,6 +72,23 @@ class MinhaJanela(QMainWindow, MainWindow):
         self.actionMessage_Log.setEnabled(False)
         self.actionTask_List.setEnabled(False)
 
+        # Atalhos do menu File iguais aos do Java (o .ui só define Ctrl+N e Ctrl+S)
+        self.actionRest_Graphical_Path.setText("Reset Graphical Path")
+        for action, shortcut in ((self.actionOpen_Project, "Ctrl+O"), (self.actionDelete_Project, "Ctrl+D"),
+                                 (self.actionReset_Simulation, "Ctrl+R"), (self.actionRest_Graphical_Path, "Ctrl+G"),
+                                 (self.actionExit, "Ctrl+Q")):
+            action.setShortcut(QKeySequence(shortcut))
+
+        self.actionSave_Project.triggered.connect(self.save_project)
+        self.actionOpen_Project.triggered.connect(self.open_project)
+        self.actionDelete_Project.triggered.connect(self.delete_project)
+        self.actionAbout.triggered.connect(lambda: AboutDialog(self).exec())
+        self.actionPacket_Format.triggered.connect(lambda: show_packet_format(self))
+
+        self.actionPrint_Link_Usage = QAction("Print Router Total Link Usage", self)
+        self.menuEdit.addAction(self.actionPrint_Link_Usage)
+        self.actionPrint_Link_Usage.triggered.connect(self.configure_link_usage_print)
+
         self.actionExit.triggered.connect(self.close)
         self.actionNew_Debugging.triggered.connect(self.open_file)
         self.horizontalSlider.valueChanged.connect(self.update_slide)
@@ -71,6 +99,9 @@ class MinhaJanela(QMainWindow, MainWindow):
         self.actionServices_List.triggered.connect(self.servicesList)
         self.actionMessage_Log.triggered.connect(self.open_message_log)
         self.actionDeloream.triggered.connect(self.open_deloream)
+        self.actionPlatform_Setup.triggered.connect(self.open_platform_setup)
+        self.actionService_and_PE_Filter.setShortcut(QKeySequence("Ctrl+F"))
+        self.actionService_and_PE_Filter.triggered.connect(self.open_filter)
 
         # ---------------------------------------------------------
         # CONTROLE DA SIMULAÇÃO
@@ -157,6 +188,24 @@ class MinhaJanela(QMainWindow, MainWindow):
         self.deloream_window.raise_()
         self.deloream_window.activateWindow()
 
+    def open_platform_setup(self):
+        if self.simulation is None:
+            QMessageBox.warning(self, "Attention", "Please, load a debugging before")
+            return
+        if PlatformSetupDialog(self.mpconfig, self.simulation.checkpoint, self).exec():
+            # O tempo em ms depende do período de clock
+            self.update_simulation_time(self.simulation_ticks)
+
+    def open_filter(self):
+        if self.simulation is None:
+            QMessageBox.warning(self, "Attention", "Please, load a debugging before")
+            return
+        # Como no Java, apaga o caminho desenhado antes de trocar o filtro
+        self.simulation.reset_graphical_path()
+        self.filter_window.show()
+        self.filter_window.raise_()
+        self.filter_window.activateWindow()
+
     def open_message_log(self):
         if self.filePath == "":
             QMessageBox.warning(self, "Attention", "Please, load a debugging before")
@@ -179,6 +228,27 @@ class MinhaJanela(QMainWindow, MainWindow):
         self.task_mapping_window.raise_()
         self.task_mapping_window.activateWindow()
 
+    def open_router_info(self, router_address):
+        """Abre a janela "Router Information" do roteador clicado (uma por roteador)."""
+        if self.router_info_windows is None:
+            self.router_info_windows = {}
+
+        window = self.router_info_windows.get(router_address)
+        if window is None:
+            window = RouterInfoWindow(self.mpconfig, self.mpsoc_information, router_address, self.simulation)
+            window.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
+            window.destroyed.connect(lambda *_, address=router_address:
+                                     self.router_info_windows.pop(address, None))
+            self.router_info_windows[router_address] = window
+        window.show()
+        window.raise_()
+        window.activateWindow()
+
+    def close_router_info_windows(self):
+        windows = self.router_info_windows or {}
+        while windows:
+            windows.popitem()[1].close()
+
     def update_slide(self, valor):
         self.label_2.setText(str(valor))
         if self.simulation is not None:
@@ -186,9 +256,11 @@ class MinhaJanela(QMainWindow, MainWindow):
 
     def open_file(self):
         caminho = QFileDialog.getExistingDirectory(self, "Open Debug Directory", "./")
-        if caminho == "":
-            return
+        if caminho != "":
+            self.load_debug(caminho)
 
+    def load_debug(self, caminho, title=None):
+        """Carrega um diretório de debug. Retorna False se ele não for válido."""
         # Verifica se o diretório possui todos os arquivos necessários
         faltando = [arquivo for arquivo in self.REQUIRED_FILES
                     if not os.path.isfile(os.path.join(caminho, arquivo))]
@@ -199,25 +271,143 @@ class MinhaJanela(QMainWindow, MainWindow):
                 "O diretório selecionado não é um diretório de debug valido.\n\n"
                 "Selecione um diretório valido"
             )
-            return
+            return False
 
         self.filePath = caminho
-        if self.filePath != "":
-            self.actionCommunication_Overview.setEnabled(True)
-            self.actionDeloream.setEnabled(True)
-            self.actionTask_Mapping_Overview.setEnabled(True)
-            self.actionServices_List.setEnabled(True)
-            self.actionMessage_Log.setEnabled(True)
-            self.actionTask_List.setEnabled(True)
+        self.actionCommunication_Overview.setEnabled(True)
+        self.actionDeloream.setEnabled(True)
+        self.actionTask_Mapping_Overview.setEnabled(True)
+        self.actionServices_List.setEnabled(True)
+        self.actionMessage_Log.setEnabled(True)
+        self.actionTask_List.setEnabled(True)
 
-            self.mpconfig = MPSoCConfig.MPSoCConfig(self.filePath)
+        self.mpconfig = MPSoCConfig.MPSoCConfig(self.filePath)
 
-            # Fecha o traffic_router.txt do debug anterior antes de abrir o novo
-            if self.mpsoc_information is not None:
-                self.mpsoc_information.close()
-            self.mpsoc_information = MPSoCInformation(self.mpconfig)
-            self.build_router_matrix()
-            self.start_simulation()
+        # Fecha o traffic_router.txt do debug anterior antes de abrir o novo
+        if self.mpsoc_information is not None:
+            self.mpsoc_information.close()
+        self.mpsoc_information = MPSoCInformation(self.mpconfig)
+        self.build_router_matrix()
+        self.start_simulation()
+
+        self.setWindowTitle(f"{self.WINDOW_TITLE}: {title or self.mpconfig.get_testcase_path() or caminho}")
+        return True
+
+    # ==========================================
+    # PROJETOS (.hdf)
+    # ==========================================
+    def save_project(self):
+        if self.mpconfig is None:
+            QMessageBox.warning(self, "Attention", "Please, load a debugging before")
+            return
+
+        name = ""
+        while True:
+            name, ok = QInputDialog.getText(self, "Save Project", "Inform the debugging project name", text=name)
+            if not ok:
+                return
+            name = name.strip()
+            error = projects.validate_name(name)
+            if error is None:
+                break
+            QMessageBox.critical(self, "Error", error)
+
+        if os.path.exists(projects.project_path(name)):
+            answer = QMessageBox.question(self, "Save Project", f"Project {name} already exists. Overwrite it?")
+            if answer != QMessageBox.StandardButton.Yes:
+                return
+
+        try:
+            projects.save_project(name, self.filePath)
+        except OSError as error:
+            QMessageBox.critical(self, "Save Project", f"Could not save the project {name}:\n{error}")
+            return
+        self.setWindowTitle(f"{self.WINDOW_TITLE}: {name}")
+        self.statusbar.showMessage(f"Project saved in {projects.project_path(name)}", 5000)
+
+    def _choose_project(self, title, accept_label=None):
+        dialog = QFileDialog(self, title, projects.projects_dir(), projects.PROJECT_FILTER)
+        dialog.setFileMode(QFileDialog.FileMode.ExistingFile)
+        if accept_label is not None:
+            dialog.setLabelText(QFileDialog.DialogLabel.Accept, accept_label)
+        if dialog.exec() and dialog.selectedFiles():
+            return dialog.selectedFiles()[0]
+        return None
+
+    def open_project(self):
+        path = self._choose_project("Open Project")
+        if path is None:
+            return
+        try:
+            debug_dir = projects.read_project(path)
+        except OSError:
+            QMessageBox.critical(self, "Error", "File not exists")
+            return
+
+        if not os.path.isdir(debug_dir):
+            QMessageBox.critical(self, "Open Project",
+                                 f"The debug directory of project {projects.project_name(path)} no longer exists:\n"
+                                 f"{debug_dir or '(empty file)'}")
+            return
+        self.stop_simulation()
+        self.load_debug(debug_dir, projects.project_name(path))
+
+    def delete_project(self):
+        path = self._choose_project("Delete Project", "Delete")
+        if path is None:
+            return
+        name = projects.project_name(path)
+        answer = QMessageBox.question(self, "Delete Project", f"Delete the project {name}?")
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        try:
+            os.remove(path)
+        except OSError:
+            QMessageBox.warning(self, "Attention", f"Error during the deletion of project: {name}")
+            return
+        QMessageBox.information(self, "Delete Project", f"Project {name} successfully deleted!")
+
+    def configure_link_usage_print(self):
+        """
+        "Print Router Total Link Usage" do Java: a cada checkpoint imprime no
+        terminal a soma do uso dos enlaces do roteador escolhido (ou o tempo).
+        """
+        if self.simulation is None:
+            QMessageBox.warning(self, "Attention", "Please, load a debugging before")
+            return
+
+        current = self.simulation.link_usage_router
+        default = "" if current < 0 else self._router_label(current)
+        label, ok = QInputDialog.getText(self, "Print Router Total Link Usage",
+                                         "Inform the router address (empty to stop printing)", text=default)
+        if not ok:
+            return
+        label = label.strip()
+        if label == "":
+            self.simulation.link_usage_router = -1
+            return
+        try:
+            if self.mpconfig.router_addressing == MPSoCConfig.MPSoCConfig.XY:
+                address = self.mpconfig.xy_label_to_ham_address(label)
+            else:
+                address = int(label)
+            if not 0 <= address < self.mpconfig.get_pe_number():
+                raise ValueError
+        except ValueError:
+            QMessageBox.warning(self, "Attention", f"Invalid router address: {label}")
+            return
+
+        mode, ok = QInputDialog.getItem(self, "Print Router Total Link Usage", "Inform the printing type:",
+                                        ["1 - Link Usage", "2 - Time"], 0, False)
+        if not ok:
+            return
+        self.simulation.link_usage_router = address
+        self.simulation.print_link_usage = mode.startswith("1")
+
+    def _router_label(self, address):
+        if self.mpconfig.router_addressing == MPSoCConfig.MPSoCConfig.XY:
+            return self.mpconfig.ham_address_to_xy_label(address)
+        return str(address)
 
     def build_router_matrix(self):
         """
@@ -228,6 +418,9 @@ class MinhaJanela(QMainWindow, MainWindow):
         if self.mpconfig is None:
             return
 
+        # Janelas de roteador pertencem ao debug anterior
+        self.close_router_info_windows()
+
         # Cria a matriz de roteadores com base na configuração carregada
         self.router_matrix_widget = RouterMatrixWidget(
             self.mpconfig.mpsoc_x,
@@ -237,6 +430,8 @@ class MinhaJanela(QMainWindow, MainWindow):
             mpsoc_config=self.mpconfig,
         )
         self.router_matrix_widget.apply_theme(self.is_dark_mode)
+        for router in self.router_matrix_widget.routers.values():
+            router.clicked.connect(self.open_router_info)
 
         # Primeira vez: cria um QScrollArea dentro do self.frame para
         # comportar malhas maiores que a área visível da janela.
@@ -279,6 +474,13 @@ class MinhaJanela(QMainWindow, MainWindow):
         self.simulation = SimulationController(self.mpconfig, self.mpsoc_information,
                                                self.router_matrix_widget, self)
         self.simulation.set_speed(self.horizontalSlider.value())
+
+        # Filtro de serviços/PEs: um por debug carregado (as listas voltam a vazio)
+        if self.filter_window is not None:
+            self.filter_window.close()
+            self.filter_window.deleteLater()
+        self.filter_window = FilterWindow(self.mpconfig, self)
+        self.simulation.packet_filter = self.filter_window.filter
 
         # Janelas de visão geral abertas passam a acompanhar o novo debug
         for window in (self.communication_window, self.task_mapping_window, self.message_log_window):
@@ -409,6 +611,7 @@ class MinhaJanela(QMainWindow, MainWindow):
         self.horizontalLayout_4.addLayout(speed_layout)
 
     def update_simulation_time(self, ticks):
+        self.simulation_ticks = ticks
         clock_period = self.mpconfig.clock_period_in_ns if self.mpconfig else 0
         self.simulation_time_label.setText(f"{ticks_to_ms(ticks, clock_period):.5f} ms")
         self.simulation_ticks_label.setText(f"{ticks} ticks")

@@ -94,6 +94,10 @@ class SimulationController(QObject):
         # chegaram; enquanto houver algum, as setas pintadas não são apagadas
         self.unfinished_packets = []
 
+        # "Print Router Total Link Usage": roteador (-1 = desligado) e o que imprimir
+        self.link_usage_router = -1
+        self.print_link_usage = True
+
         self.checkpoint = CheckpointController(mpsoc_config.clock_period_in_ns, self.checkpoint_reached)
 
         self.timer = QTimer(self)
@@ -275,8 +279,17 @@ class SimulationController(QObject):
             ports += [MPSoCConfig.NORTH0, MPSoCConfig.NORTH1]
         ports += [MPSoCConfig.LOCAL0, MPSoCConfig.LOCAL1]
 
+        total_link_usage = 0.0
         for port in ports:
-            router.update_throughput(port, router_info.get_port_bandwidth_throughput_in_cycles(port) * percent)
+            usage = router_info.get_port_bandwidth_throughput_in_cycles(port) * percent
+            router.update_throughput(port, usage)
+            if port not in (MPSoCConfig.LOCAL0, MPSoCConfig.LOCAL1):
+                total_link_usage += usage
+
+        if address == self.link_usage_router:
+            # Mesma saída do Java: um valor por checkpoint, com vírgula decimal
+            value = total_link_usage if self.print_link_usage else self.checkpoint.current_time_ms
+            print(f"{value:.6g}".replace(".", ","), flush=True)
 
         router_info.reset_bandwidth_throughput()
         router_info.reset_throughput()

@@ -44,6 +44,11 @@ diretório debug/
 | `simulation.py` | Controle da simulação e janelas de checkpoint | `MainFrame.java` (parte de simulação), `CheckpointController.java` |
 | `overview_windows.py` | Janelas Communication Overview, Task Mapping Overview e Message Log, atualizadas durante a simulação | `CommunicationOverview.java`, `TaskMappingFrame.java`, `MainFrame.showMessageList` |
 | `slave_matrix.py` / `pe_matrix.py` | Células das grades das duas janelas acima | — |
+| `router_info_window.py` | Janela "Router Information" (clique num roteador): abas Log, Applications, Scheduling e Traffic, janela Task Information e gráfico de escalonamento | `RouterInfoFrame.java`, `PETextLog.java`, `SchedulingTab.java`, `scheduling/SchedulingPanel.java`, `TaskInfoFrame.java` |
+| `platform_setup.py` | Janela Platform Setup (menu Edit): flit size, período de clock e largura da janela de checkpoint | `PlatformSetupFrame.java` |
+| `filter_window.py` | Janela Service and PE Filter (menu Filters, Ctrl+F): escolhe quais pacotes a simulação processa, por serviço (Only/Except) e por PE | `FilterForm.java` |
+| `projects.py` | Projetos salvos (`.hdf`): File → Save / Open / Delete Project | `MainFrame.java` (save/open/deleteMenuItem) |
+| `help_dialogs.py` | Help → About e Help → Packet Format | `util/AboutFrame.java`, `MainFrame.packetFormatMenuItemActionPerformed` |
 | `deloream.py` | Deloream: leitor das mensagens `$$$` das tarefas nos logs dos processadores | `deloream/DeloreamMainFrame.java`, `deloream/TaskMessage.java` |
 | `theme.py` | Paletas dos temas claro/escuro, cores da grade e preferência salva | — |
 | `router_matrix.py` | Desenho da grade e de cada roteador (imagens, setas, %) | `Roteador.java`, `UJPanelImagem.java`, `MainFrame.createNoCPanel` |
@@ -485,7 +490,6 @@ Classes/funções: `TaskMessage.parse(line)`, `read_name_relations(platform_path
 
 - **Back To** só vai até tempos já simulados (mesmo comportamento do Java).
 - **Filtro de serviços/PEs** (`Filters → Service and PE Filter`): ainda não implementado. O controlador já aceita `SimulationController.packet_filter`.
-- **Janela de informações do roteador** (`RouterInfoFrame`): o `RouterWidget` já emite `clicked(router_address)`, falta a janela.
 - O relatório de uso de link por roteador (`printRouterTotalLinkUsage`, oculto no Java) não foi portado.
 
 ---
