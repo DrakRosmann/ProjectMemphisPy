@@ -3,7 +3,7 @@ import sys
 
 from PySide6.QtGui import Qt, QPalette, QColor, QAction, QKeySequence
 from PySide6.QtWidgets import (QApplication, QMainWindow, QFileDialog, QMessageBox, QWidget, QInputDialog,
-                               QVBoxLayout, QHBoxLayout, QScrollArea, QTableWidgetItem, QTableWidget, QLabel,
+                               QVBoxLayout, QHBoxLayout, QTableWidgetItem, QTableWidget, QLabel,
                                QHeaderView)
 
 import theme
@@ -14,11 +14,15 @@ from router_matrix import RouterMatrixWidget
 from simulation import SimulationController, MAX_REPAINT_SPEED, ticks_to_ms
 from overview_windows import CommunicationOverviewWindow, MessageLogWindow, TaskMappingWindow
 from deloream import DeloreamWindow
+from statistics_windows import ApplicationTimelineWindow, TrafficStatisticsWindow
 from router_info_window import RouterInfoWindow
 from platform_setup import PlatformSetupDialog
 from filter_window import FilterWindow
 from help_dialogs import AboutDialog, show_packet_format
 import projects
+import export
+import path_view
+import testcase_files
 
 
 class MinhaJanela(QMainWindow, MainWindow):
@@ -26,7 +30,6 @@ class MinhaJanela(QMainWindow, MainWindow):
     mpconfig = None
     mpsoc_information = None
     router_matrix_widget = None
-    frame_scroll_area = None
     simulation = None
     communication_window = None
     task_mapping_window = None
@@ -35,6 +38,8 @@ class MinhaJanela(QMainWindow, MainWindow):
     router_info_windows = None
     simulation_ticks = 0
     filter_window = None
+    traffic_statistics_window = None
+    timeline_window = None
 
     WINDOW_TITLE = "Memphis-V Graphical Debugger"
 
@@ -72,6 +77,17 @@ class MinhaJanela(QMainWindow, MainWindow):
         self.actionMessage_Log.setEnabled(False)
         self.actionTask_List.setEnabled(False)
 
+        # Ferramentas baseadas nas métricas do artigo do Memphis (não existem no Java)
+        self.actionTraffic_Statistics = QAction("Traffic Statistics", self)
+        self.actionApplication_Timeline = QAction("Application Timeline", self)
+        self.menuTools.insertAction(self.actionDeloream, self.actionTraffic_Statistics)
+        self.menuTools.insertAction(self.actionDeloream, self.actionApplication_Timeline)
+        self.menuTools.insertSeparator(self.actionDeloream)
+        for action in (self.actionTraffic_Statistics, self.actionApplication_Timeline):
+            action.setEnabled(False)
+        self.actionTraffic_Statistics.triggered.connect(self.open_traffic_statistics)
+        self.actionApplication_Timeline.triggered.connect(self.open_application_timeline)
+
         # Atalhos do menu File iguais aos do Java (o .ui só define Ctrl+N e Ctrl+S)
         self.actionRest_Graphical_Path.setText("Reset Graphical Path")
         for action, shortcut in ((self.actionOpen_Project, "Ctrl+O"), (self.actionDelete_Project, "Ctrl+D"),
@@ -84,6 +100,22 @@ class MinhaJanela(QMainWindow, MainWindow):
         self.actionDelete_Project.triggered.connect(self.delete_project)
         self.actionAbout.triggered.connect(lambda: AboutDialog(self).exec())
         self.actionPacket_Format.triggered.connect(lambda: show_packet_format(self))
+
+        # Imagem da malha inteira (mesmo a parte fora da área visível)
+        self.actionSave_Mesh_PNG = QAction("Save Mesh as PNG…", self)
+        self.menuFile.insertAction(self.actionExit, self.actionSave_Mesh_PNG)
+        self.actionSave_Mesh_PNG.triggered.connect(self.save_mesh_png)
+
+        # Acompanhar um traffic_router.txt que o simulador ainda está gravando
+        self.actionFollow_Live_Trace = QAction("Follow Live Trace", self)
+        self.actionFollow_Live_Trace.setCheckable(True)
+        self.actionFollow_Live_Trace.setToolTip("At the end of traffic_router.txt, keep waiting for new packets "
+                                                "instead of stopping (for a simulation still running)")
+        self.menuFile.insertAction(self.actionSave_Mesh_PNG, self.actionFollow_Live_Trace)
+        self.actionFollow_Live_Trace.toggled.connect(self.set_follow_live_trace)
+
+        # As janelas de análise mostram caminhos de pacotes na malha desta janela
+        path_view.set_handler(self.show_packet_path)
 
         self.actionPrint_Link_Usage = QAction("Print Router Total Link Usage", self)
         self.menuEdit.addAction(self.actionPrint_Link_Usage)
@@ -206,6 +238,31 @@ class MinhaJanela(QMainWindow, MainWindow):
         self.filter_window.raise_()
         self.filter_window.activateWindow()
 
+    def _show_window(self, window):
+        window.show()
+        window.raise_()
+        window.activateWindow()
+
+    def open_traffic_statistics(self):
+        if self.simulation is None:
+            QMessageBox.warning(self, "Attention", "Please, load a debugging before")
+            return
+        window = self.traffic_statistics_window
+        if window is None or not window.isVisible():
+            window = TrafficStatisticsWindow(self.mpconfig, self.mpsoc_information, self.simulation)
+            self.traffic_statistics_window = window
+        self._show_window(window)
+
+    def open_application_timeline(self):
+        if self.simulation is None:
+            QMessageBox.warning(self, "Attention", "Please, load a debugging before")
+            return
+        window = self.timeline_window
+        if window is None or not window.isVisible():
+            window = ApplicationTimelineWindow(self.mpconfig, self.simulation, self)
+            self.timeline_window = window
+        self._show_window(window)
+
     def open_message_log(self):
         if self.filePath == "":
             QMessageBox.warning(self, "Attention", "Please, load a debugging before")
@@ -280,6 +337,8 @@ class MinhaJanela(QMainWindow, MainWindow):
         self.actionServices_List.setEnabled(True)
         self.actionMessage_Log.setEnabled(True)
         self.actionTask_List.setEnabled(True)
+        self.actionTraffic_Statistics.setEnabled(True)
+        self.actionApplication_Timeline.setEnabled(True)
 
         self.mpconfig = MPSoCConfig.MPSoCConfig(self.filePath)
 
@@ -404,6 +463,12 @@ class MinhaJanela(QMainWindow, MainWindow):
         self.simulation.link_usage_router = address
         self.simulation.print_link_usage = mode.startswith("1")
 
+    def save_mesh_png(self):
+        if self.router_matrix_widget is None:
+            QMessageBox.warning(self, "Attention", "Please, load a debugging before")
+            return
+        export.export_png(self, self.router_matrix_widget, f"mesh_{self.simulation_ticks}_ticks")
+
     def _router_label(self, address):
         if self.mpconfig.router_addressing == MPSoCConfig.MPSoCConfig.XY:
             return self.mpconfig.ham_address_to_xy_label(address)
@@ -433,34 +498,22 @@ class MinhaJanela(QMainWindow, MainWindow):
         for router in self.router_matrix_widget.routers.values():
             router.clicked.connect(self.open_router_info)
 
-        # Primeira vez: cria um QScrollArea dentro do self.frame para
-        # comportar malhas maiores que a área visível da janela.
-        if self.frame_scroll_area is None:
-            self.frame_scroll_area = QScrollArea(self.frame)
-            # IMPORTANTE: widgetResizable=False. Com True, o Qt estica a
-            # matriz para preencher todo o frame e, sem stretch factor nas
-            # colunas/linhas do QGridLayout, esse espaço extra é distribuído
-            # como gaps entre os roteadores. Com False, a matriz mantém seu
-            # tamanho natural (roteadores colados) e o scroll aparece só se
-            # ela for maior que a área visível.
-            self.frame_scroll_area.setWidgetResizable(False)
-            self.frame_scroll_area.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        # Nomes dos periféricos nas bordas, do YAML do testcase (sem ele, a borda é
+        # marcada quando passar o primeiro pacote vindo de um periférico)
+        peripherals, _yaml_path = testcase_files.read_peripherals(self.mpconfig)
+        self.router_matrix_widget.set_peripherals(peripherals)
 
+        # A malha é uma QGraphicsView (tem rolagem e zoom próprios) e ocupa
+        # todo o self.frame, substituindo a matriz de um debug anterior
+        frame_layout = self.frame.layout()
+        if frame_layout is None:
             frame_layout = QVBoxLayout(self.frame)
             frame_layout.setContentsMargins(0, 0, 0, 0)
-            frame_layout.addWidget(self.frame_scroll_area)
-            self.frame.setLayout(frame_layout)
-
-        # Troca (ou define) o widget interno do scroll pela nova matriz,
-        # substituindo uma matriz antiga caso um novo arquivo seja aberto.
-        old_widget = self.frame_scroll_area.takeWidget()
-        if old_widget is not None:
-            old_widget.deleteLater()
-
-        # Garante que a matriz assuma seu tamanho real (layout aplicado)
-        # antes de ser exibida dentro do scroll area sem resize forçado.
-        self.router_matrix_widget.adjustSize()
-        self.frame_scroll_area.setWidget(self.router_matrix_widget)
+        while frame_layout.count():
+            old_widget = frame_layout.takeAt(0).widget()
+            if old_widget is not None:
+                old_widget.deleteLater()
+        frame_layout.addWidget(self.router_matrix_widget)
 
     # ==========================================
     # SIMULAÇÃO DOS ROTEADORES
@@ -483,14 +536,19 @@ class MinhaJanela(QMainWindow, MainWindow):
         self.simulation.packet_filter = self.filter_window.filter
 
         # Janelas de visão geral abertas passam a acompanhar o novo debug
-        for window in (self.communication_window, self.task_mapping_window, self.message_log_window):
+        for window in (self.communication_window, self.task_mapping_window, self.message_log_window,
+                       self.traffic_statistics_window):
             if window is not None and window.isVisible():
                 window.set_information(self.mpconfig, self.mpsoc_information, self.simulation)
+        if self.timeline_window is not None and self.timeline_window.isVisible():
+            self.timeline_window.set_information(self.mpconfig, self.simulation)
         self.simulation.time_changed.connect(self.update_simulation_time)
         self.simulation.packet_changed.connect(self.update_current_packet_table)
         self.simulation.running_changed.connect(self.on_simulation_running_changed)
         self.simulation.finished.connect(self.on_simulation_finished)
         self.simulation.unknown_service.connect(self.on_unknown_service)
+        self.simulation.waiting_for_data.connect(self.on_waiting_for_data)
+        self.simulation.set_follow(self.actionFollow_Live_Trace.isChecked())
 
         self.update_simulation_time(0)
         self.reset_current_packet_table()
@@ -570,6 +628,29 @@ class MinhaJanela(QMainWindow, MainWindow):
 
     def on_simulation_finished(self):
         self.statusbar.showMessage("End of traffic_router.txt reached", 5000)
+
+    def set_follow_live_trace(self, follow):
+        if self.simulation is not None:
+            self.simulation.set_follow(follow)
+
+    def on_waiting_for_data(self, waiting):
+        if waiting:
+            self.statusbar.showMessage("Following traffic_router.txt: waiting for new packets…")
+        else:
+            self.statusbar.clearMessage()
+
+    def show_packet_path(self, hops, target, highlight, description):
+        """Pinta na malha o caminho vindo de uma janela de análise (ver path_view)."""
+        if self.simulation is None:
+            return
+        self.simulation.show_path(hops, target, highlight)
+        if self.router_matrix_widget is not None and highlight is not None:
+            router = self.router_matrix_widget.get_router_by_address(highlight)
+            if router is not None:
+                self.router_matrix_widget.ensure_router_visible(router)
+        self.statusbar.showMessage(description or "Packet path", 10000)
+        self.raise_()
+        self.activateWindow()
 
     def on_unknown_service(self, packet):
         if self.mpconfig.router_addressing == MPSoCConfig.MPSoCConfig.XY:

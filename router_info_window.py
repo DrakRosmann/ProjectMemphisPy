@@ -17,13 +17,16 @@ import bisect
 import os
 from dataclasses import dataclass
 
-from PySide6.QtCore import QEvent, QRect, Qt, QTimer
+from PySide6.QtCore import QEvent, QRect, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QFont, QFontDatabase, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import (QAbstractItemView, QComboBox, QGridLayout, QGroupBox, QHBoxLayout,
                                QHeaderView, QInputDialog, QLabel, QMessageBox, QPlainTextEdit,
-                               QPushButton, QScrollArea, QTableWidget, QTableWidgetItem, QTabWidget,
+                               QPushButton, QScrollArea, QSplitter, QTableWidget, QTableWidgetItem, QTabWidget,
                                QVBoxLayout, QWidget)
 
+import analysis
+import export
+import path_view
 from overview_windows import _LiveOverview, _router_label
 from util.MPSoCConfig import MPSoCConfig
 
@@ -63,6 +66,14 @@ def _highlight(item, background):
 
 def _task_name(mpsoc_config, task_id):
     return mpsoc_config.task_name_hash.get(task_id, str(task_id))
+
+
+def _slice_task(mpsoc_config, task_id):
+    if task_id < 0:
+        return "-"
+    if task_id >= analysis.KERNEL_TASK_ID:
+        return "kernel"
+    return _task_name(mpsoc_config, task_id)
 
 
 def _pe_xy_address(mpsoc_config, router_address):
@@ -155,6 +166,8 @@ class RouterInfoWindow(_LiveOverview):
         self.task_table.setToolTip("Double click a task to see its messages.\n"
                                    "ALLOCATED* = task still running")
         self.task_table.cellDoubleClicked.connect(self._open_task_info)
+        export.install_export_actions(self.task_table, f"router_{self.router_address}_applications",
+                                      csv_view=self.task_table)
         return self.task_table
 
     def _update_task_table(self):
@@ -227,6 +240,8 @@ class RouterInfoWindow(_LiveOverview):
 
         self.traffic_table = _read_only_table(["Input Port", "Total Volume", "Service Volume", "Percentual"])
         self.traffic_table.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
+        export.install_export_actions(self.traffic_table, f"router_{self.router_address}_traffic",
+                                      csv_view=self.traffic_table)
 
         layout = QVBoxLayout(tab)
         layout.addWidget(filter_box)
@@ -407,6 +422,7 @@ class SchedulingEvent:
     start: int
     finish: int
     rect: QRect = None  # posição no último desenho, para o clique
+    pe: int = -1        # endereço hamiltoniano do PE que executou o trecho
 
 
 def read_cpu_events(debug_dir):
@@ -464,6 +480,9 @@ class SchedulingGraph(QWidget):
       - Ctrl + roda do mouse: zoom horizontal
     """
 
+    # Trecho clicado (SchedulingEvent) ou None
+    selection_changed = Signal(object)
+
     TOP = 50           # INITI_Y
     ROW_HEIGHT = 26    # NAME_SPACE
     CPU_COLOR = QColor(21, 119, 40)
@@ -511,15 +530,17 @@ class SchedulingGraph(QWidget):
 
         if self.app_filter == -1:
             pe = _pe_report_address(config, self.router_address)
-            slices = read_scheduling_report(path, pe).get(pe, [])
+            slices = [(self.router_address, *piece) for piece in read_scheduling_report(path, pe).get(pe, [])]
         else:
             # Tarefas da aplicação em todos os PEs (os eventos de CPU têm bits acima do 16)
-            slices = [piece for pe_slices in read_scheduling_report(path).values()
+            def ham(report_pe):
+                return config.xy_to_ham_addr(report_pe) if config.router_addressing == MPSoCConfig.XY else report_pe
+            slices = [(ham(report_pe), *piece) for report_pe, pe_slices in read_scheduling_report(path).items()
                       for piece in pe_slices
                       if piece[0] >> 16 == 0 and piece[0] >> 8 == self.app_filter]
 
-        return [SchedulingEvent(code, self._event_name(code), start, finish)
-                for code, start, finish in slices]
+        return [SchedulingEvent(code, self._event_name(code), start, finish, pe=pe)
+                for pe, code, start, finish in slices]
 
     def _event_name(self, code):
         if code in self.cpu_events:
@@ -709,6 +730,7 @@ class SchedulingGraph(QWidget):
         if event.button() == Qt.MouseButton.LeftButton:
             self.selected = self._event_at(event.position().toPoint())
             self.update()
+            self.selection_changed.emit(self.selected)
 
     def wheelEvent(self, event):
         if not event.modifiers() & Qt.KeyboardModifier.ControlModifier:
@@ -724,6 +746,8 @@ class SchedulingGraphWindow(QWidget):
     def __init__(self, mpsoc_config, router_address, app_filter=-1):
         super().__init__()
         self.graph = SchedulingGraph(mpsoc_config, router_address, app_filter)
+        name = f"scheduling_{router_address}" if app_filter == -1 else f"scheduling_app_{app_filter}"
+        export.install_export_actions(self.graph, name, png_widget=self.graph)
 
         if app_filter == -1:
             self.setWindowTitle(f"Scheduling Graph {_router_label(mpsoc_config, router_address)}")
@@ -735,13 +759,78 @@ class SchedulingGraphWindow(QWidget):
         scroll.setWidgetResizable(True)
         scroll.setWidget(self.graph)
         scroll.horizontalScrollBar().setSingleStep(200)
+
+        # Pacotes do PE durante o trecho clicado (depuração hardware + software)
+        self.mpsoc_config = mpsoc_config
+        self._tracker = None
+        self._slice_messages = []
+        self.slice_label = QLabel("Click a slice of the graph to see the packets the PE received and sent "
+                                  "during it (e.g. the packet that caused an interruption).")
+        self.slice_label.setWordWrap(True)
+        self.slice_table = _read_only_table(["Time (tick)", "Direction", "From", "To", "Service", "Flits",
+                                             "Latency (cycles)", "Tasks"])
+        self.slice_table.setToolTip("Double click a packet to show its path on the main window mesh")
+        self.slice_table.cellDoubleClicked.connect(self._show_slice_message)
+        export.install_export_actions(self.slice_table, f"{name}_slice_packets", csv_view=self.slice_table)
+        packets_panel = QWidget()
+        packets_layout = QVBoxLayout(packets_panel)
+        packets_layout.addWidget(self.slice_label)
+        packets_layout.addWidget(self.slice_table)
+        self.graph.selection_changed.connect(self._show_slice_packets)
+
+        splitter = QSplitter(Qt.Orientation.Vertical)
+        splitter.addWidget(scroll)
+        splitter.addWidget(packets_panel)
+
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.addWidget(scroll)
+        layout.addWidget(splitter)
 
         screen = self.screen().availableGeometry()
-        self.resize(screen.width(), min(screen.height(), self.graph.minimumHeight() + 30))
+        graph_height = min(screen.height() - 240, self.graph.minimumHeight() + 30)
+        splitter.setSizes([graph_height, 220])
+        self.resize(screen.width(), min(screen.height(), graph_height + 240))
         self.move(screen.topLeft())
+
+    def _all_messages(self):
+        # O trace inteiro é analisado uma vez, no primeiro clique
+        if self._tracker is None:
+            self._tracker = analysis.track_all(self.mpsoc_config, analysis.read_all_packets(self.mpsoc_config))
+        return self._tracker.messages
+
+    def _show_slice_packets(self, event):
+        config = self.mpsoc_config
+        if event is None:
+            self._slice_messages = []
+            self.slice_table.setRowCount(0)
+            return
+
+        self._slice_messages = analysis.messages_in_slice(self._all_messages(), event.pe, event.start, event.finish)
+        self.slice_label.setText(
+            f"<b>{event.name}</b> on PE {_router_label(config, event.pe)}, {event.start} → {event.finish} ticks: "
+            f"{len(self._slice_messages)} packet(s). Received = delivered to the PE up to "
+            f"{analysis.SLICE_LOOKBACK} cycles before the slice or during it; sent = injected during it.")
+
+        table = self.slice_table
+        table.setRowCount(len(self._slice_messages))
+        for row, (message, direction) in enumerate(self._slice_messages):
+            time = message.delivered if direction == "received" else message.injected
+            source = _router_label(config, message.source)
+            if message.from_peripheral:
+                source = f"Periph. @ {source}"
+            tasks = (f"{_slice_task(config, message.task_source)} → {_slice_task(config, message.task_target)}"
+                     if message.task_source >= 0 or message.task_target >= 0 else "-")
+            values = (str(time), direction, source, _router_label(config, message.target),
+                      config.get_string_service_name(message.service), str(message.flits),
+                      str(message.latency) if message.delivered >= 0 else "not delivered", tasks)
+            for column, value in enumerate(values):
+                table.setItem(row, column, QTableWidgetItem(value))
+
+    def _show_slice_message(self, row, _column):
+        if 0 <= row < len(self._slice_messages):
+            message, _direction = self._slice_messages[row]
+            path_view.show_message(message, description=f"Packet {self.mpsoc_config.get_string_service_name(message.service)} "
+                                                        f"from the scheduling graph")
 
 
 # ==========================================
@@ -798,6 +887,7 @@ class TaskInfoWindow(QWidget):
         buttons.addStretch()
 
         self.message_table = _read_only_table(["Time: Requested / Delivered", "Remote task", "Delivered", "Num"])
+        export.install_export_actions(self.message_table, f"task_{task_id}_messages", csv_view=self.message_table)
         header = self.message_table.horizontalHeader()
         header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
         for column in (1, 2, 3):

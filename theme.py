@@ -24,10 +24,18 @@ class MatrixColors:
     canvas: str         # fundo atrás dos roteadores
     text: str           # textos fora do corpo do roteador (ex.: % da porta local)
     cluster_border: str  # borda entre clusters
+    arrow: str           # enlace sem pacote passando
+    arrow_active: str    # enlace por onde o pacote atual passou
+    peripheral_fill: str
+    peripheral_text: str  # também usado na borda da caixa do periférico
 
 
-LIGHT_MATRIX = MatrixColors(canvas="#ffffff", text="#000000", cluster_border="#808080")
-DARK_MATRIX = MatrixColors(canvas="#262626", text="#e6e6e6", cluster_border="#6e6e6e")
+LIGHT_MATRIX = MatrixColors(canvas="#ffffff", text="#000000", cluster_border="#808080",
+                            arrow="#8c8c8c", arrow_active="#e00000",
+                            peripheral_fill="#fff1e0", peripheral_text="#b34700")
+DARK_MATRIX = MatrixColors(canvas="#262626", text="#e6e6e6", cluster_border="#6e6e6e",
+                           arrow="#7a7a7a", arrow_active="#ff4040",
+                           peripheral_fill="#3d2a1a", peripheral_text="#ffb070")
 
 
 def matrix_colors(dark):

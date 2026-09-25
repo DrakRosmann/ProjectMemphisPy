@@ -74,6 +74,7 @@ class MPSoCConfig:
 
         self.services_hash = SortedDict()
         self.task_name_hash = SortedDict()
+        self.app_name_hash = SortedDict()
         self.service_reference = []
         self.task_allocation_services = []
         self.task_terminated_services = []
@@ -116,6 +117,8 @@ class MPSoCConfig:
                         case "BEGIN_task_name_relation":
                             # Passamos o OBJETO do arquivo, não a string do caminho
                             self.initialize_task_naming(platform_file)
+                        case "BEGIN_app_name_relation":
+                            self.initialize_app_naming(platform_file)
                         case _:
                             pass
         except FileNotFoundError:
@@ -149,6 +152,19 @@ class MPSoCConfig:
                     # Ignora caso o ID não seja um número válido
                     continue
 
+
+    def initialize_app_naming(self, platform_file):
+        """Lê a relação nome<TAB>ID das aplicações (até END_app_name_relation)."""
+        self.app_name_hash = SortedDict()
+        for line in platform_file:
+            fields = line.split()
+            if fields == ["END_app_name_relation"]:
+                break
+            if len(fields) >= 2:
+                try:
+                    self.app_name_hash[int(fields[1])] = fields[0]
+                except ValueError:
+                    continue
 
     def initialize_services(self, services_file_path):
         """Lê os serviços (nome e código decimal) do arquivo services.cfg."""

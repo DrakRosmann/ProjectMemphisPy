@@ -18,6 +18,9 @@ class ReadTrafficData:
         self.neighbors = neighbors
         self.packet_read_control = 0
         self.all_packets = []
+        # Arquivo ainda sendo gravado pelo simulador: uma linha sem "\n" no
+        # fim está incompleta e só é lida quando terminar de ser gravada
+        self.follow = False
 
         traffic_path = os.path.join(mpsoc_config.debug_file_path, "traffic_router.txt")
         # Gera FileNotFoundError caso o arquivo não exista
@@ -39,13 +42,20 @@ class ReadTrafficData:
     def get_next_packet(self):
         # Ainda não lido: busca a próxima linha válida do arquivo
         if self.packet_read_control == len(self.all_packets):
-            for line in self.traffic:
+            while True:
+                # tell() em arquivo texto é lento: só é preciso para desfazer uma linha incompleta
+                position = self.traffic.tell() if self.follow else None
+                line = self.traffic.readline()
+                if not line:
+                    return None               # fim do arquivo (por enquanto, no modo follow)
+                if self.follow and not line.endswith("\n"):
+                    self.traffic.seek(position)
+                    return None
                 packet = self._parse_packet(line)
                 if packet is not None:
                     self.all_packets.append(packet)
                     self.packet_read_control += 1
                     return packet
-            return None
 
         packet = self.all_packets[self.packet_read_control]
         self.packet_read_control += 1

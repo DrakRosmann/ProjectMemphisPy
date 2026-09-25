@@ -13,9 +13,11 @@ import random
 
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QColor, QPixmap
-from PySide6.QtWidgets import (QHeaderView, QListWidget, QMessageBox, QTableWidgetItem, QVBoxLayout,
+from PySide6.QtWidgets import (QComboBox, QHBoxLayout, QHeaderView, QLabel, QListWidget, QMessageBox, QTableWidgetItem, QVBoxLayout,
                                QWidget)
 
+import analysis
+import export
 from commsUi import Ui_Form as Ui_CommunicationOverview
 from pe_matrix import PEMatrixWidget
 from slave_matrix import SlaveMatrixWidget
@@ -152,6 +154,10 @@ class CommunicationOverviewWindow(_LiveOverview, Ui_CommunicationOverview):
         self.radioButton_2.setChecked(True)
         self.radioButton_4.setChecked(True)
 
+        export.install_export_actions(self, "communication_overview", png_widget=self)
+        export.install_export_actions(self.tableWidget, "communication_statistics", csv_view=self.tableWidget,
+                                      png_widget=self)
+
         self.checkBox.toggled.connect(self._on_filter_changed)
         self.comboBox.currentIndexChanged.connect(self._on_filter_changed)
         for radio in (self.radioButton, self.radioButton_2, self.radioButton_3,
@@ -282,6 +288,8 @@ class TaskMappingWindow(_LiveOverview, Ui_TaskMap):
         super().__init__(mpsoc_config, mpsoc_information, simulation)
         self.setupUi(self)
 
+        export.install_export_actions(self, "task_mapping", png_widget=self)
+
         # O .ui repete "All tasks status" no terceiro botão
         self.radioButton_3.setText("Only Terminated")
 
@@ -380,7 +388,8 @@ class MessageLogWindow(_LiveOverview):
           (pacote chegando ao roteador de destino)
 
     Mostra todos os pacotes já lidos e acrescenta os novos conforme a
-    simulação avança.
+    simulação avança. A caixa "Application" mostra só as mensagens de uma
+    aplicação (pelas tarefas de origem/destino do pacote).
     """
 
     def __init__(self, mpsoc_config, mpsoc_information, simulation=None):
@@ -388,14 +397,38 @@ class MessageLogWindow(_LiveOverview):
         self.setWindowTitle("Message Log")
         self.resize(500, 600)
 
+        self.app_combo = QComboBox()
+        self.app_combo.currentIndexChanged.connect(lambda _index: self.rebuild())
+        app_row = QHBoxLayout()
+        app_row.setContentsMargins(6, 6, 6, 0)
+        app_row.addWidget(QLabel("Application:"))
+        app_row.addWidget(self.app_combo, 1)
+
         self.list_widget = QListWidget(self)
         self.list_widget.setUniformItemSizes(True)  # listas longas continuam rápidas
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
+        layout.addLayout(app_row)
         layout.addWidget(self.list_widget)
+
+        self._fill_app_combo()
 
         self._packets_listed = 0
         self.rebuild()
+
+    def _fill_app_combo(self):
+        self.known_apps = analysis.known_app_ids(self.mpsoc_config)
+        self.app_combo.blockSignals(True)
+        self.app_combo.clear()
+        self.app_combo.addItem("All", None)
+        for app in sorted(self.known_apps):
+            self.app_combo.addItem(analysis.app_label(self.mpsoc_config, app), app)
+        self.app_combo.blockSignals(False)
+
+    def set_information(self, mpsoc_config, mpsoc_information, simulation=None):
+        self.mpsoc_config = mpsoc_config
+        self._fill_app_combo()
+        super().set_information(mpsoc_config, mpsoc_information, simulation)
 
     def rebuild(self):
         self.list_widget.clear()
@@ -431,6 +464,9 @@ class MessageLogWindow(_LiveOverview):
         scrollbar = self.list_widget.verticalScrollBar()
         at_bottom = scrollbar.value() == scrollbar.maximum()
 
+        app = self.app_combo.currentData()
+        if app is not None:
+            new_packets = [packet for packet in new_packets if app in analysis.packet_apps(packet, self.known_apps)]
         messages = [message for message in map(self._message, new_packets) if message is not None]
         self.list_widget.addItems(messages)
 

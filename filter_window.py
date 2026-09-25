@@ -6,6 +6,8 @@ pacotes do traffic_router.txt a simulação processa:
 
   - aba Services: só os serviços da lista ("Only") ou todos menos eles ("Except")
   - aba PE:       só os pacotes capturados nos roteadores da lista
+  - aba Application: só os pacotes de/para tarefas das aplicações da lista
+    (não existe no Java; o artigo do Memphis cita o filtro por aplicação)
 
 A lista montada numa aba só passa a valer ao clicar em "Apply" (lista vazia
 desliga o filtro daquela aba). Pacotes rejeitados não atualizam os roteadores
@@ -16,6 +18,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (QComboBox, QHBoxLayout, QLabel, QListWidget, QListWidgetItem,
                                QMessageBox, QPushButton, QRadioButton, QTabWidget, QVBoxLayout, QWidget)
 
+import analysis
 from util.MPSoCConfig import MPSoCConfig
 
 # Serviço sempre descartado pelo filtro do Java
@@ -109,7 +112,9 @@ class FilterWindow(QWidget):
 
         self.filtered_services = set()
         self.filtered_pes = set()
+        self.filtered_apps = set()
         self.except_services = False
+        self.known_apps = analysis.known_app_ids(mpsoc_config)
         self.ignored_service = mpsoc_config.get_service_value(IGNORED_SERVICE)
 
         services = [(mpsoc_config.get_string_service_name(service), service)
@@ -129,6 +134,10 @@ class FilterWindow(QWidget):
         self.services_tab = _FilterTab("Services", "Added Services", services,
                                        self._apply_services, self.close, mode)
         self.pe_tab = _FilterTab("PEs", "Added PEs", pes, self._apply_pes, self.close)
+        apps = [(analysis.app_label(mpsoc_config, app), app) for app in sorted(self.known_apps)]
+        self.app_tab = _FilterTab("Applications", "Added Applications", apps, self._apply_apps, self.close)
+        self.app_tab.setToolTip("Keeps only packets whose source or target task belongs to the selected "
+                                "applications.\nKernel packets without task IDs are hidden.")
 
         self.status_label = QLabel()
         self.status_label.setWordWrap(True)
@@ -136,6 +145,7 @@ class FilterWindow(QWidget):
         tabs = QTabWidget()
         tabs.addTab(self.services_tab, "Services")
         tabs.addTab(self.pe_tab, "PE")
+        tabs.addTab(self.app_tab, "Application")
 
         layout = QVBoxLayout(self)
         layout.addWidget(tabs)
@@ -159,6 +169,10 @@ class FilterWindow(QWidget):
         self.filtered_pes = set(pes)
         self._update_status()
 
+    def _apply_apps(self, apps):
+        self.filtered_apps = set(apps)
+        self._update_status()
+
     def _update_status(self):
         config = self.mpsoc_config
         parts = []
@@ -168,6 +182,9 @@ class FilterWindow(QWidget):
         if self.filtered_pes:
             names = ", ".join(self._pe_label(address) for address in sorted(self.filtered_pes))
             parts.append(f"Only PEs: {names}")
+        if self.filtered_apps:
+            names = ", ".join(analysis.app_label(config, app) for app in sorted(self.filtered_apps))
+            parts.append(f"Only applications: {names}")
         self.status_label.setText("Active filter — " + "; ".join(parts) if parts else "No filter applied")
 
     # ------------------------------------------
@@ -185,6 +202,9 @@ class FilterWindow(QWidget):
         # No Java o filtro de PE era ignorado quando havia filtro de serviço;
         # aqui os dois valem juntos
         if self.filtered_pes and packet.router_address not in self.filtered_pes:
+            return False
+
+        if self.filtered_apps and not analysis.packet_apps(packet, self.known_apps) & self.filtered_apps:
             return False
 
         return True

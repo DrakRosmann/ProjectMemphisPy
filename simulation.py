@@ -20,6 +20,16 @@ FAST_BATCH_SIZE = 200
 # No "voltar no tempo", só os últimos pacotes são desenhados
 GO_REPAINT_LAST_PACKETS = 50
 
+# Acompanhando um traffic_router.txt que ainda está sendo gravado: intervalo
+# entre as tentativas de ler novas linhas quando o arquivo chega ao fim
+FOLLOW_POLL_MS = 250
+
+# Lado da malha de onde vem o pacote que entra por cada porta
+_PORT_SIDES = {
+    MPSoCConfig.NORTH0: "N", MPSoCConfig.NORTH1: "N", MPSoCConfig.SOUTH0: "S", MPSoCConfig.SOUTH1: "S",
+    MPSoCConfig.EAST0: "E", MPSoCConfig.EAST1: "E", MPSoCConfig.WEST0: "W", MPSoCConfig.WEST1: "W",
+}
+
 
 class CheckpointController:
     """
@@ -78,6 +88,8 @@ class SimulationController(QObject):
     finished = Signal()
     # Pacote com serviço que não existe no services.cfg
     unknown_service = Signal(object)
+    # Modo "follow": fim do arquivo alcançado, esperando novas linhas (True) ou voltaram a chegar (False)
+    waiting_for_data = Signal(bool)
 
     def __init__(self, mpsoc_config, mpsoc_information, router_matrix, parent=None):
         super().__init__(parent)
@@ -103,6 +115,10 @@ class SimulationController(QObject):
         self.timer = QTimer(self)
         self.timer.timeout.connect(self._play_step)
 
+        # Acompanhar um traffic_router.txt que ainda está sendo gravado
+        self.follow = False
+        self.waiting = False
+
     # ==========================================
     # CONTROLES
     # ==========================================
@@ -113,7 +129,24 @@ class SimulationController(QObject):
             self.timer.setInterval(self._interval())
 
     def _interval(self):
+        if self.waiting:
+            return FOLLOW_POLL_MS
         return max(0, 400 - self.speed * 4)
+
+    def set_follow(self, follow):
+        """Em vez de parar no fim do arquivo, espera o simulador gravar mais pacotes."""
+        self.follow = follow
+        self.mpsoc_information.read_traffic.follow = follow
+        if not follow:
+            self._set_waiting(False)
+
+    def _set_waiting(self, waiting):
+        if waiting == self.waiting:
+            return
+        self.waiting = waiting
+        if self.running:
+            self.timer.setInterval(self._interval())
+        self.waiting_for_data.emit(waiting)
 
     def play(self):
         if self.running:
@@ -182,10 +215,15 @@ class SimulationController(QObject):
         packet = self.mpsoc_information.get_next_packet(self.packet_filter, limit_time)
 
         if packet is None:
+            if self.follow:
+                # O simulador ainda pode gravar mais pacotes: continua rodando
+                self._set_waiting(True)
+                return -1
             self.router_matrix.reset_routers()
             self.stop()
             self.finished.emit()
             return -1
+        self._set_waiting(False)
 
         if packet.service not in self.mpsoc_config.services_hash:
             self.stop()
@@ -202,16 +240,31 @@ class SimulationController(QObject):
 
     def repaint_router(self, packet):
         """Pinta o caminho do pacote: seta de entrada no roteador e de saída no vizinho."""
-        router = self.router_matrix.get_router_by_address(packet.router_address)
+        if packet.input_port in (MPSoCConfig.LOCAL0, MPSoCConfig.LOCAL1):
+            # Pacote novo saindo do PE: apaga o caminho anterior se nenhum
+            # outro pacote estiver em trânsito
+            if not self.unfinished_packets:
+                self.router_matrix.reset_routers()
+
+            # Destinos fora da malha (ex.: periféricos) nunca "chegam", então não são aguardados
+            if 0 <= packet.target_router < self.mpsoc_config.get_pe_number():
+                self.unfinished_packets.append(packet.target_router)
+
+        self.paint_hop(packet.router_address, packet.input_port, packet.target_router)
+
+        # Pacote chegou ao destino
+        if packet.router_address == packet.target_router and packet.router_address in self.unfinished_packets:
+            self.unfinished_packets.remove(packet.router_address)
+
+    def paint_hop(self, address, port, target):
+        """Seta de entrada no roteador (e de saída no vizinho de onde o pacote veio)."""
+        router = self.router_matrix.get_router_by_address(address)
         if router is None:
             return
 
-        port = packet.input_port
-        neighbors = self.mpsoc_information.neighbors
-        address = packet.router_address
-
         if port in _INPUT_ARROWS:
             local_arrow, neighbor_arrow = _INPUT_ARROWS[port]
+            neighbors = self.mpsoc_information.neighbors
 
             if port in (MPSoCConfig.NORTH0, MPSoCConfig.NORTH1):
                 neighbor_address = neighbors.get_vizinho_cima(address)
@@ -225,28 +278,35 @@ class SimulationController(QObject):
             neighbor = self.router_matrix.get_router_by_address(neighbor_address)
             if neighbor is not None:
                 neighbor.paint_arrow(neighbor_arrow)
+            elif neighbor_address == -1 and port in _PORT_SIDES:
+                # Veio de fora da malha: marca o periférico, se o YAML não o declarou
+                side = _PORT_SIDES[port]
+                if side not in router.peripherals:
+                    router.set_peripheral(side, "Peripheral")
 
         elif port in (MPSoCConfig.LOCAL0, MPSoCConfig.LOCAL1):
-            # Pacote novo saindo do PE: apaga o caminho anterior se nenhum
-            # outro pacote estiver em trânsito
-            if not self.unfinished_packets:
-                self.router_matrix.reset_routers()
-
             local_arrow = MPSoCConfig.LOCAL_IN
-
-            # Destinos fora da malha (ex.: periféricos) nunca "chegam", então não são aguardados
-            if 0 <= packet.target_router < self.mpsoc_config.get_pe_number():
-                self.unfinished_packets.append(packet.target_router)
         else:
             return
 
         router.paint_arrow(local_arrow)
-
-        # Pacote chegou ao destino
-        if address == packet.target_router:
+        if address == target:
             router.paint_arrow(MPSoCConfig.LOCAL_OUT)
-            if address in self.unfinished_packets:
-                self.unfinished_packets.remove(address)
+
+    def show_path(self, hops, target, highlight=None):
+        """
+        Mostra na malha o caminho de um pacote já analisado: `hops` são
+        (roteador, porta de entrada) na ordem; `highlight` recebe a moldura.
+        Para a simulação para o desenho não ser apagado pelo próximo pacote.
+        """
+        self.stop()
+        self.reset_graphical_path()
+        for address, port in hops:
+            self.paint_hop(address, port, target)
+        if highlight is not None:
+            router = self.router_matrix.get_router_by_address(highlight)
+            if router is not None:
+                router.set_highlight(True)
 
     # ==========================================
     # TAXA DE USO DOS ENLACES

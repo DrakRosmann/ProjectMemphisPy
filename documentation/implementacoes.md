@@ -49,6 +49,12 @@ diretório debug/
 | `filter_window.py` | Janela Service and PE Filter (menu Filters, Ctrl+F): escolhe quais pacotes a simulação processa, por serviço (Only/Except) e por PE | `FilterForm.java` |
 | `projects.py` | Projetos salvos (`.hdf`): File → Save / Open / Delete Project | `MainFrame.java` (save/open/deleteMenuItem) |
 | `help_dialogs.py` | Help → About e Help → Packet Format | `util/AboutFrame.java`, `MainFrame.packetFormatMenuItemActionPerformed` |
+| `analysis.py` | Análises sem interface: aplicação de cada pacote, latência (casamento injeção → entrega), vazão em Mbps e linha do tempo da admissão de aplicações | — (métricas do artigo do Memphis, DAES 2019) |
+| `statistics_windows.py` | Janelas Traffic Statistics (Links, Applications, Messages, Routing, Blocked) e Application Timeline (menu Tools) | — |
+| `path_view.py` | Liga as janelas de análise à malha principal: duplo clique num pacote pinta o caminho dele e destaca o roteador | — |
+| `testcase_files.py` | Leitura dos periféricos do YAML do testcase (`<testcase>/<testcase>.yaml`, seção `hw → Peripherals`) | — |
+| `export.py` | Exportação de tabelas em CSV e de janelas/gráficos em PNG (botões e menu do botão direito) | — |
+| `tests/` | Testes automatizados (pytest), com o cenário extraído do `DEBUG EXAMPLE.zip` | — |
 | `deloream.py` | Deloream: leitor das mensagens `$$$` das tarefas nos logs dos processadores | `deloream/DeloreamMainFrame.java`, `deloream/TaskMessage.java` |
 | `theme.py` | Paletas dos temas claro/escuro, cores da grade e preferência salva | — |
 | `router_matrix.py` | Desenho da grade e de cada roteador (imagens, setas, %) | `Roteador.java`, `UJPanelImagem.java`, `MainFrame.createNoCPanel` |
@@ -489,8 +495,17 @@ Classes/funções: `TaskMessage.parse(line)`, `read_name_relations(platform_path
 ## 12. Limitações e próximos passos
 
 - **Back To** só vai até tempos já simulados (mesmo comportamento do Java).
-- **Filtro de serviços/PEs** (`Filters → Service and PE Filter`): ainda não implementado. O controlador já aceita `SimulationController.packet_filter`.
-- O relatório de uso de link por roteador (`printRouterTotalLinkUsage`, oculto no Java) não foi portado.
+- **Latência e caminho dos pacotes** (Tools → Traffic Statistics): o `traffic_router.txt` não tem ID de pacote e os campos de tarefa podem mudar entre os hops de um mesmo pacote. Cada pacote é seguido hop a hop por serviço, tamanho, roteador vizinho (pela porta de entrada) e tempo; as tarefas da injeção definem a aplicação. No exemplo, 1 388 de 1 388 pacotes são entregues e todos os que têm hops são seguidos pelo caminho inteiro. A latência é só a da rede (sem o tempo do kernel).
+- **Validação do roteamento** (aba Routing): cada registro intermediário é conferido contra o XY (primeiro X, depois Y). Serviços com muitos registros fora do XY não são tratados como erro, e sim listados como não-XY: no Memphis-V são os serviços 0–3 do canal LOW, que se espalham pela malha inteira (inundação da rede de gerência).
+- **Pacotes parados e deadlock** (aba Blocked): lista os pacotes em trânsito sem avançar há N ciclos e procura espera circular (cada pacote esperando o enlace ocupado pelo seguinte). Com XY não deveria haver ciclo.
+- **Ordem do `traffic_router.txt`**: o arquivo não está estritamente em ordem de tempo (a linha de um pacote longo pode ser gravada depois de registros mais novos). O **Back To** usa busca binária pelo tempo e herda essa pequena imprecisão do Java.
+- **Caminho do pacote na malha**: duplo clique nas abas Messages, Routing e Blocked (Traffic Statistics) ou na tabela de pacotes do gráfico de escalonamento pinta o caminho registrado na janela principal e destaca o roteador (destino, onde parou ou onde violou o XY). A simulação é parada para o desenho não ser apagado; `File → Reset Graphical Path` limpa.
+- **Escalonamento × pacotes**: clicar num trecho do gráfico de escalonamento lista os pacotes que o PE recebeu (entregues até 100 ciclos antes do trecho ou durante ele) e enviou (injetados durante ele) — ex.: o pacote que causou uma interrupção.
+- **Periféricos**: os nomes vêm do YAML do testcase, lido linha a linha (sem PyYAML). Sem o YAML, a borda é marcada como "Peripheral" quando passa o primeiro pacote vindo de fora da malha.
+- **Follow Live Trace** (`File`): no fim do `traffic_router.txt` a simulação não para; tenta ler novas linhas a cada 250 ms. Uma linha sem `\n` no fim é considerada incompleta e só é lida depois de terminar de ser gravada. A Application Timeline e as análises do trace inteiro são atualizadas com **Reload**.
+- **Registros sem destino na malha**: `TASK_TERMINATED` de tamanho 0 com destino -1 é um aviso do kernel na porta local, não um pacote; é ignorado nas estatísticas.
+- **Application Timeline**: o pedido, o mapeamento, a liberação e o término das aplicações vêm das mensagens do `mapper_task` no log (`log/log<X>x<Y>.txt`). Sem esse log, só aparecem a chegada do código e o término das tarefas.
+- **Término de tarefa**: no Memphis-V o `TASK_TERMINATED` traz a tarefa no último campo (o Java lia o penúltimo, do formato do HeMPS, e as tarefas nunca apareciam como terminadas). Corrigido em `RouterInformation`.
 
 ---
 
@@ -503,5 +518,14 @@ Classes/funções: `TaskMessage.parse(line)`, `read_name_relations(platform_path
 5. Digite um tempo já simulado em **Back To** e clique em **Go**.
 6. `File → Reset Simulation` volta ao início.
 7. Abra `Tools → Communication Overview`, `Tools → Task Mapping Overview` e `Tools → Message Log` e rode a simulação: as porcentagens, as tarefas e as mensagens mudam conforme os pacotes avançam (2 755 mensagens ao fim do exemplo).
+
+### Testes automatizados
+
+```
+uv sync            # instala também o pytest (grupo dev)
+uv run pytest      # ~4 s
+```
+
+Os testes rodam sem tela (Qt offscreen), extraem o cenário do `DEBUG EXAMPLE.zip` e usam QSettings e pasta de projetos temporárias. O workflow `.github/workflows/build.yml` roda os testes antes de gerar o executável.
 
 Resultados esperados com o exemplo: 3 101 pacotes, último pacote em 6 251 176 ticks (62,51176 ms com clock de 10 ns), 42 serviços e 11 tarefas.

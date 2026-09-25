@@ -37,7 +37,10 @@ class RouterInformation:
         # Pacote está saindo do PE
         elif packet.input_port in (MPSoCConfig.LOCAL0, MPSoCConfig.LOCAL1):
             if packet.service in config.task_terminated_services:
-                self.tasks.append(TaskInformation(packet.task_source, "TERMINATED", packet.time))
+                # No Memphis-V a tarefa terminada vem no último campo (task_source = -1);
+                # no formato do HeMPS, usado pelo Java, vinha no penúltimo
+                task_id = packet.task_source if packet.task_source >= 0 else packet.task_target
+                self.tasks.append(TaskInformation(task_id, "TERMINATED", packet.time))
             elif packet.service == config.get_service_value("MESSAGE_REQUEST"):
                 self.tasks.append(TaskInformation(packet.task_target, "MESSAGE_REQUEST",
                                                   packet.time, packet.task_source))

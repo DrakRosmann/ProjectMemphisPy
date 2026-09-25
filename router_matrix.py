@@ -2,9 +2,10 @@
 """
 router_matrix.py
 
-Monta a matriz gráfica de roteadores (grade NoC/MPSoC) dentro de um QWidget,
-usando como base o "Ui_Form" gerado a partir de Roteador.ui (arquivo
-Roteador.py) para desenhar cada roteador individual.
+Desenha a matriz de roteadores (grade NoC/MPSoC) com QGraphicsView /
+QGraphicsScene: corpo dos roteadores, setas dos enlaces, porta local e
+periféricos são desenhados em vetor pelo próprio Qt (sem imagens), então a
+malha pode ser ampliada/reduzida sem perder nitidez.
 
 Semântica dos campos de MPSoCConfig (igual ao formato de configuração do
 Memphis: mpsoc_dimension é o tamanho TOTAL da malha, cluster_dimension é o
@@ -15,433 +16,780 @@ tamanho de um agrupamento dentro dela):
                               gerenciamento dentro da malha), usado só para
                               desenhar a borda de separação entre clusters
 
-Ou seja, o total de roteadores é sempre mpsoc_x * mpsoc_y — cluster_x e
-cluster_y NÃO multiplicam esse total, apenas dividem a malha em blocos
-visuais (com borda) de cluster_x por cluster_y roteadores cada.
+A numeração de cada roteador segue a convenção do debugger original: o
+roteador "0x0" fica no canto inferior esquerdo e o eixo Y cresce para cima.
 
-A numeração de cada roteador segue a mesma convenção do print de
-referência: o roteador "0x0" fica no canto inferior esquerdo e o eixo Y
-cresce para cima (0x0, 0x1, 0x2, ... de baixo para cima).
+Cada enlace entre dois roteadores vizinhos tem, por canal (HIGH/LOW), uma
+seta em cada sentido. A mesma seta é, ao mesmo tempo, a saída de um roteador
+e a entrada do vizinho (ex.: EAST_OUT_HIGH de 0x0 == WEST_IN_HIGH de 1x0),
+por isso os dois roteadores guardam a mesma ArrowItem. Nas bordas da malha,
+as setas ligam o roteador à caixa do periférico (desenhada fora do roteador).
 
 Durante a simulação, cada roteador pinta de vermelho as setas por onde o
 pacote atual passou (paint_arrow) e mostra a taxa de uso de cada enlace
 (update_throughput), igual ao Roteador.java do debugger original.
+
+Zoom: Ctrl + roda do mouse (ou gesto de pinça), Ctrl +/-/0, os botões no
+canto da vista ou duplo clique no fundo (ajusta a malha à janela). Arrastar
+o fundo move a vista.
 """
 
 import math
-import os
 
-from PySide6.QtCore import QEvent, QObject, QRect, Qt, Signal
-from PySide6.QtGui import QColor, QFont, QImage, QPainter, QPixmap
-from PySide6.QtWidgets import QFrame, QGridLayout, QWidget
+from PySide6.QtCore import QEvent, QPointF, QRectF, QSize, Qt, QTimer, Signal
+from PySide6.QtGui import (QBrush, QColor, QFont, QFontMetricsF, QImage, QKeySequence, QPainter,
+                           QPainterPath, QPen, QPolygonF, QShortcut)
+from PySide6.QtWidgets import (QFrame, QGraphicsItem, QGraphicsObject, QGraphicsRectItem, QGraphicsScene,
+                               QGraphicsView, QHBoxLayout, QLabel, QToolButton)
 
 import theme
-from Roteador import Ui_Form
 from util.MPSoCConfig import MPSoCConfig
 
 
-IMAGES_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "images")
+# ==========================================
+# GEOMETRIA (unidades da cena = pixels com zoom 100%)
+# ==========================================
+BODY = 130                  # lado do corpo do roteador
+GAP = 64                    # espaço entre dois roteadores (onde ficam as setas)
+PITCH = BODY + GAP
+ARROW_OFFSET = 8            # distância de cada seta do par ao centro do canal
+ARROW_MARGIN = 4            # folga entre a ponta da seta e o corpo do roteador
+SHAFT_WIDTH = 4.5
+HEAD_LENGTH = 11
+HEAD_WIDTH = 12
 
-# Cache das imagens já carregadas (QPixmap só pode ser criado com a QApplication ativa)
-_pixmap_cache: dict[str, QPixmap] = {}
+# Caixa do periférico: mais larga nas bordas norte/sul (setas verticais) e mais
+# alta nas bordas leste/oeste, para cobrir os dois pares de setas
+PERIPHERAL_NS = QSize(110, 38)
+PERIPHERAL_EW = QSize(100, 90)
 
+ZOOM_MIN, ZOOM_MAX, ZOOM_STEP = 0.1, 8.0, 1.25
 
-def _white_to_alpha(image: QImage) -> QImage:
-    """
-    Remove o fundo branco das imagens das setas (os PNGs não têm canal
-    alfa), para que fiquem legíveis sobre o fundo escuro do modo escuro.
+# Cor do corpo do roteador de acordo com o tipo de PE (as mesmas das imagens antigas)
+_ROUTER_COLORS = {
+    MPSoCConfig.SLAVE: "#b7dde8",
+    MPSoCConfig.CLUSTER_MASTER: "#c4d6a0",
+    MPSoCConfig.GLOBAL_MASTER: "#f9c499",
+}
+_PE_TYPE_NAMES = {
+    MPSoCConfig.SLAVE: "Slave PE",
+    MPSoCConfig.CLUSTER_MASTER: "Cluster manager PE",
+    MPSoCConfig.GLOBAL_MASTER: "Global manager PE",
+}
+_BODY_BORDER = "#2d2e2f"
+_HIGHLIGHT = "#ff8c00"
 
-    A cor mais distante do branco é tomada como a cor da seta; os pixels
-    mais claros (fundo e serrilhado da borda) viram essa cor com opacidade
-    proporcional à distância do branco.
-    """
-    image = image.convertToFormat(QImage.Format.Format_ARGB32)
-    width, height = image.width(), image.height()
+_SIDE_NAMES = {"N": "north", "S": "south", "E": "east", "W": "west"}
+_OPPOSITE = {"N": "S", "S": "N", "E": "W", "W": "E"}
+# Direção "para fora" de cada lado, em coordenadas da cena (Y cresce para baixo)
+_OUTWARD = {"N": (0, -1), "S": (0, 1), "E": (1, 0), "W": (-1, 0)}
 
-    def distance(color: QColor) -> int:
-        return 255 - min(color.red(), color.green(), color.blue())
+HIGH, LOW = MPSoCConfig.HIGH, MPSoCConfig.LOW
 
-    pixels = [[image.pixelColor(x, y) for x in range(width)] for y in range(height)]
-    base = max((color for row in pixels for color in row), key=distance)
-    base_distance = distance(base) or 1
-
-    for y, row in enumerate(pixels):
-        for x, color in enumerate(row):
-            alpha = distance(color) / base_distance
-            if alpha < 1:
-                faded = QColor(base)
-                faded.setAlphaF(alpha)
-                image.setPixelColor(x, y, faded)
-
-    return image
-
-
-def _pixmap(name: str) -> QPixmap:
-    if name not in _pixmap_cache:
-        image = QImage(os.path.join(IMAGES_DIR, name))
-        # As imagens do corpo do roteador são opacas e não têm fundo branco
-        if not name.startswith("Router"):
-            image = _white_to_alpha(image)
-        _pixmap_cache[name] = QPixmap.fromImage(image)
-    return _pixmap_cache[name]
-
-
-# Imagem do roteador de acordo com o tipo de PE
-_ROUTER_IMAGES = {
-    MPSoCConfig.SLAVE: "Router.png",
-    MPSoCConfig.CLUSTER_MASTER: "Router_cluster_master.png",
-    MPSoCConfig.GLOBAL_MASTER: "Router_master.png",
+# (lado, canal) -> (seta de entrada, seta de saída) nas constantes do MPSoCConfig
+_SIDE_ARROWS = {
+    ("E", HIGH): (MPSoCConfig.EAST_IN_HIGH, MPSoCConfig.EAST_OUT_HIGH),
+    ("E", LOW): (MPSoCConfig.EAST_IN_LOW, MPSoCConfig.EAST_OUT_LOW),
+    ("W", HIGH): (MPSoCConfig.WEST_IN_HIGH, MPSoCConfig.WEST_OUT_HIGH),
+    ("W", LOW): (MPSoCConfig.WEST_IN_LOW, MPSoCConfig.WEST_OUT_LOW),
+    ("N", HIGH): (MPSoCConfig.NORTH_IN_HIGH, MPSoCConfig.NORTH_OUT_HIGH),
+    ("N", LOW): (MPSoCConfig.NORTH_IN_LOW, MPSoCConfig.NORTH_OUT_LOW),
+    ("S", HIGH): (MPSoCConfig.SOUTH_IN_HIGH, MPSoCConfig.SOUTH_OUT_HIGH),
+    ("S", LOW): (MPSoCConfig.SOUTH_IN_LOW, MPSoCConfig.SOUTH_OUT_LOW),
 }
 
-# Seta -> (widget do Roteador.ui, imagem quando pintada de vermelho)
-_ARROWS = {
-    MPSoCConfig.EAST_IN_HIGH: ("in_east_HIGH", "red_left.png"),
-    MPSoCConfig.EAST_OUT_HIGH: ("out_east_HIGH", "red_undirected_h.png"),
-    MPSoCConfig.EAST_IN_LOW: ("in_east_LOW", "red_left.png"),
-    MPSoCConfig.EAST_OUT_LOW: ("out_east_LOW", "red_undirected_h.png"),
-    MPSoCConfig.NORTH_IN_HIGH: ("in_north_HIGH", "red_down.png"),
-    MPSoCConfig.NORTH_OUT_HIGH: ("out_north_HIGH", "red_undirected_v.png"),
-    MPSoCConfig.NORTH_IN_LOW: ("in_north_LOW", "red_down.png"),
-    MPSoCConfig.NORTH_OUT_LOW: ("out_north_LOW", "red_undirected_v.png"),
-    MPSoCConfig.WEST_IN_HIGH: ("in_weast_HIGH", "red_right.png"),
-    MPSoCConfig.WEST_OUT_HIGH: ("out_weast_HIGH", "red_undirected_h.png"),
-    MPSoCConfig.WEST_IN_LOW: ("in_weast_LOW", "red_right.png"),
-    MPSoCConfig.WEST_OUT_LOW: ("out_weast_LOW", "red_undirected_h.png"),
-    MPSoCConfig.SOUTH_IN_HIGH: ("in_south_HIGH", "red_up.png"),
-    MPSoCConfig.SOUTH_OUT_HIGH: ("out_south_HIGH", "red_undirected_v.png"),
-    MPSoCConfig.SOUTH_IN_LOW: ("in_south_LOW", "red_up.png"),
-    MPSoCConfig.SOUTH_OUT_LOW: ("out_south_LOW", "red_undirected_v.png"),
-    MPSoCConfig.LOCAL_IN: ("local_in", "red_local_in.png"),
-    MPSoCConfig.LOCAL_OUT: ("local_out", "red_local_out.png"),
+# Porta física -> (lado, canal) do rótulo com a taxa de uso do enlace
+_PORT_SIDES = {
+    MPSoCConfig.EAST0: ("E", HIGH), MPSoCConfig.EAST1: ("E", LOW),
+    MPSoCConfig.WEST0: ("W", HIGH), MPSoCConfig.WEST1: ("W", LOW),
+    MPSoCConfig.NORTH0: ("N", HIGH), MPSoCConfig.NORTH1: ("N", LOW),
+    MPSoCConfig.SOUTH0: ("S", HIGH), MPSoCConfig.SOUTH1: ("S", LOW),
 }
-
-# Setas (e imagens em estado normal) de cada lado do roteador; só são
-# desenhadas quando existe um vizinho naquele lado
-_WEST_ARROWS = {"out_weast_HIGH": "undirected_h.png", "in_weast_HIGH": "right.png",
-                "out_weast_LOW": "undirected_h.png", "in_weast_LOW": "right.png"}
-_EAST_ARROWS = {"in_east_LOW": "left.png", "out_east_LOW": "undirected_h.png",
-                "in_east_HIGH": "left.png", "out_east_HIGH": "undirected_h.png"}
-_SOUTH_ARROWS = {"in_south_LOW": "up.png", "out_south_LOW": "undirected_v.png",
-                 "in_south_HIGH": "up.png", "out_south_HIGH": "undirected_v.png"}
-_NORTH_ARROWS = {"out_north_HIGH": "undirected_v.png", "in_north_HIGH": "down.png",
-                 "out_north_LOW": "undirected_v.png", "in_north_LOW": "down.png"}
-
-# Porta física -> rótulo com a taxa de uso do enlace
-_PORT_LABELS = {
-    MPSoCConfig.EAST0: "east_HIGH_Label",
-    MPSoCConfig.EAST1: "east_LOW_Label",
-    MPSoCConfig.NORTH0: "north_HIGH_Label",
-    MPSoCConfig.NORTH1: "north_LOW_Label",
-    MPSoCConfig.WEST0: "weast_HIGH_Label",
-    MPSoCConfig.WEST1: "weast_LOW_Label",
-    MPSoCConfig.SOUTH0: "south_HIGH_Label",
-    MPSoCConfig.SOUTH1: "south_LOW_Label",
-    MPSoCConfig.LOCAL0: "local_Label",
-    MPSoCConfig.LOCAL1: "local_Label",
-}
+_LOCAL_PORTS = (MPSoCConfig.LOCAL0, MPSoCConfig.LOCAL1)
 
 
-class _ImagePainter(QObject):
+def _channel_positions(mpsoc_config) -> dict[int, float]:
     """
-    Desenha uma imagem esticada sobre os QWidgets "vazios" do Roteador.ui
-    (setas e corpo do roteador), no lugar do UJPanelImagem do Java.
+    Posição (ao longo do lado do roteador) do centro de cada canal. Com um
+    canal físico só existem as portas ímpares (LOW, ver read_traffic_data),
+    que ficam no meio do lado.
     """
+    if mpsoc_config is not None and mpsoc_config.channel_number == 1:
+        return {LOW: BODY * 0.5}
+    return {HIGH: BODY * 0.3, LOW: BODY * 0.7}
+
+
+def _percent_font() -> QFont:
+    # "Andale Mono" nem sempre está instalada; qualquer monoespaçada serve
+    font = QFont("Monospace")
+    font.setStyleHint(QFont.StyleHint.Monospace)
+    font.setPixelSize(10)
+    return font
+
+
+def _format_load(value: float) -> str:
+    return f"{min(value, 99.99):05.2f}%"
+
+
+class _MeshScene(QGraphicsScene):
+    """Cena da malha; guarda as cores do tema atual, lidas pelos itens ao pintar."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.images: dict[QWidget, str] = {}
-
-    def set_image(self, widget: QWidget, name: str | None) -> None:
-        """Define a imagem do widget; None deixa o widget vazio."""
-        if self.images.get(widget) == name:
-            return
-        if widget not in self.images:
-            widget.installEventFilter(self)
-        self.images[widget] = name
-        widget.update()
-
-    def eventFilter(self, obj, event):
-        if event.type() == QEvent.Type.Paint and obj in self.images:
-            if self.images[obj] is None:
-                return True
-            painter = QPainter(obj)
-            painter.drawPixmap(obj.rect(), _pixmap(self.images[obj]))
-            painter.end()
-            return True
-        return super().eventFilter(obj, event)
+        self.colors = theme.matrix_colors(False)
 
 
-def _matrix_stylesheet(dark: bool) -> str:
+# ==========================================
+# ITENS DA CENA
+# ==========================================
+class ArrowItem(QGraphicsItem):
     """
-    Folha de estilo da grade inteira (aplicada no RouterMatrixWidget e
-    herdada pelos roteadores). Os rótulos dentro do corpo do roteador são
-    sempre pretos, pois o corpo tem cor clara nos dois temas; o % da porta
-    local fica fora do corpo e acompanha o tema.
-    """
-    colors = theme.matrix_colors(dark)
-    return f"""
-    #routerMatrix {{
-        background-color: {colors.canvas};
-    }}
-    #routerMatrix QLabel {{
-        background-color: transparent;
-        color: #000000;
-    }}
-    #routerMatrix QLabel#local_Label {{
-        color: {colors.text};
-    }}
-    #routerMatrix QFrame[clusterFrame="true"] {{
-        background-color: transparent;
-        border: 1px solid {colors.cluster_border};
-    }}
+    Seta de um enlace, de `start` até `end`. Fica cinza normalmente e vermelha
+    quando o pacote atual passou por ela. Setas `optional` (bordas da malha sem
+    periférico conhecido) só aparecem enquanto estão pintadas.
     """
 
+    def __init__(self, start: QPointF, end: QPointF, optional: bool = False, tooltip: str = ""):
+        super().__init__()
+        self.painted = False
+        self.optional = optional
 
-class RouterWidget(QWidget, Ui_Form):
+        delta = end - start
+        self._length = math.hypot(delta.x(), delta.y())
+        self.setPos(start)
+        self.setRotation(math.degrees(math.atan2(delta.y(), delta.x())))
+        self.setZValue(1)
+        if tooltip:
+            self.setToolTip(tooltip)
+
+        length, shaft, head = self._length, SHAFT_WIDTH / 2, HEAD_WIDTH / 2
+        neck = length - HEAD_LENGTH
+        self._polygon = QPolygonF([
+            QPointF(0, -shaft), QPointF(neck, -shaft), QPointF(neck, -head), QPointF(length, 0),
+            QPointF(neck, head), QPointF(neck, shaft), QPointF(0, shaft),
+        ])
+        self._update_visibility()
+
+    def set_painted(self, painted: bool) -> None:
+        if painted != self.painted:
+            self.painted = painted
+            self._update_visibility()
+            self.update()
+
+    def set_optional(self, optional: bool) -> None:
+        self.optional = optional
+        self._update_visibility()
+
+    def _update_visibility(self) -> None:
+        self.setVisible(self.painted or not self.optional)
+
+    def boundingRect(self) -> QRectF:
+        return QRectF(0, -HEAD_WIDTH / 2 - 1, self._length + 1, HEAD_WIDTH + 2)
+
+    def paint(self, painter: QPainter, option, widget=None) -> None:
+        colors = self.scene().colors
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QColor(colors.arrow_active if self.painted else colors.arrow))
+        painter.drawPolygon(self._polygon)
+
+
+class PeripheralItem(QGraphicsItem):
+    """Caixa com o nome do periférico ligado a uma porta de borda, fora do roteador."""
+
+    def __init__(self, rect: QRectF, name: str, router_label: str, side: str):
+        super().__init__()
+        self._rect = rect
+        self.name = name
+        self.setZValue(1)
+        self.setToolTip(f"Peripheral {name} at the {_SIDE_NAMES[side]} port of router {router_label}")
+        self._font = QFont()
+        self._font.setBold(True)
+        self._font.setPixelSize(12)
+
+    def boundingRect(self) -> QRectF:
+        return self._rect.adjusted(-1, -1, 1, 1)
+
+    def paint(self, painter: QPainter, option, widget=None) -> None:
+        colors = self.scene().colors
+        color = QColor(colors.peripheral_text)
+        painter.setPen(QPen(color, 1.5))
+        painter.setBrush(QColor(colors.peripheral_fill))
+        painter.drawRoundedRect(self._rect, 6, 6)
+
+        painter.setFont(self._font)
+        text_rect = self._rect.adjusted(6, 4, -6, -4)
+        text = QFontMetricsF(self._font).elidedText(self.name, Qt.TextElideMode.ElideRight, text_rect.width())
+        painter.drawText(text_rect, Qt.AlignmentFlag.AlignCenter, text)
+
+
+class RouterItem(QGraphicsObject):
     """
-    Um único roteador da malha. Reaproveita o layout gerado em Roteador.py
-    e apenas customiza o texto central (routerLabel) para exibir a posição
-    "XxY" do roteador dentro da malha, igual ao print de referência.
+    Um roteador da malha: corpo colorido pelo tipo de PE, nome no centro,
+    porcentagem de uso de cada enlace junto ao lado correspondente e, no canto
+    superior esquerdo (fora do corpo), as setas e a porcentagem da porta local.
+    As setas dos enlaces são itens próprios (ArrowItem), compartilhados com o
+    vizinho, e ficam em `self.arrows`.
     """
 
     # Emitido com o endereço hamiltoniano quando o roteador é clicado
     clicked = Signal(int)
 
-    def __init__(self, pos_x: int, pos_y: int, parent=None,
-                 mpsoc_x: int = 1, mpsoc_y: int = 1, mpsoc_config=None):
-        super().__init__(parent)
-        self.setupUi(self)
-
+    def __init__(self, pos_x: int, pos_y: int, mpsoc_x: int = 1, mpsoc_y: int = 1, mpsoc_config=None):
+        super().__init__()
         self.pos_x = pos_x
         self.pos_y = pos_y
         self.mpsoc_x = mpsoc_x
         self.mpsoc_y = mpsoc_y
-        self.need_reset = True
+        self.need_reset = False
+        self.highlighted = False
+        self._hovered = False
 
         if mpsoc_config is not None:
             self.router_address = mpsoc_config.xy_to_ham_addr((pos_x << 8) | pos_y)
             self.pe_type = mpsoc_config.get_pe_type(self.router_address)
-            if mpsoc_config.channel_number == 1:
-                self._set_single_channel_geometry()
         else:
             self.router_address = pos_y * mpsoc_x + pos_x
             self.pe_type = MPSoCConfig.SLAVE
 
+        self.xy_label = f"{pos_x}x{pos_y}"
         if mpsoc_config is not None and mpsoc_config.router_addressing == MPSoCConfig.HAMILTONIAN:
-            self.routerLabel.setText(str(self.router_address))
+            self.label = str(self.router_address)
         else:
-            self.routerLabel.setText(f"{pos_x}x{pos_y}")
+            self.label = self.xy_label
 
-        self.router.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._painter = _ImagePainter(self)
+        self._channels = _channel_positions(mpsoc_config)
 
-        # "Andale Mono" nem sempre está instalada; usa qualquer fonte
-        # monoespaçada em tamanho fixo para o "00.00%" caber no rótulo
-        percent_font = QFont("Monospace")
-        percent_font.setStyleHint(QFont.StyleHint.Monospace)
-        percent_font.setPixelSize(10)
-        for label_name in set(_PORT_LABELS.values()):
-            getattr(self, label_name).setFont(percent_font)
+        # Constante do MPSoCConfig (*_IN_* / *_OUT_* / LOCAL_*) -> ArrowItem
+        self.arrows: dict[int, ArrowItem] = {}
+        # Periféricos ligados às portas de borda: lado ("N", "S", "E", "W") -> nome
+        self.peripherals: dict[str, str] = {}
+        # Callback da matriz que desenha a caixa do periférico
+        self._peripheral_added = None
 
-        # O Roteador.ui fixa fundo branco no Form inteiro; as cores passam a
-        # vir da folha de estilo da matriz (_matrix_stylesheet), que segue o tema
-        self.setStyleSheet("")
+        self._loads = {key: _format_load(0) for key in _PORT_SIDES.values()}
+        self._local_load = _format_load(0)
 
-        # Mesma posição do Java: acima do corpo do roteador, sem cruzar a borda
-        self.local_Label.setGeometry(QRect(21, 16, 40, 13))
+        self._name_font = QFont("Arial")
+        self._name_font.setBold(True)
+        self._name_font.setPixelSize(19)
+        self._percent_font = _percent_font()
 
-        self.reset_arrows()
+        self.setZValue(2)
+        self.setAcceptHoverEvents(True)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        pe_name = _PE_TYPE_NAMES.get(self.pe_type, "PE")
+        self.setToolTip(f"Router {self.label} ({self.xy_label}, address {self.router_address})\n"
+                        f"{pe_name} - click for details")
 
-    def _set_single_channel_geometry(self) -> None:
-        """Com apenas um canal físico, as setas LOW ocupam o centro de cada lado."""
-        self.north_LOW_Label.setGeometry(QRect(70, 0, 40, 20))
-        self.in_north_LOW.setGeometry(QRect(110, 0, 20, 30))
-        self.out_north_LOW.setGeometry(QRect(77, 0, 6, 30))
+    # ---------- desenho ----------
+    def body_rect(self) -> QRectF:
+        return QRectF(0, 0, BODY, BODY)
 
-        self.east_LOW_Label.setGeometry(QRect(90, 30, 40, 20))
-        self.in_east_LOW.setGeometry(QRect(160, 63, 33, 20))
-        self.out_east_LOW.setGeometry(QRect(160, 107, 30, 6))
+    def boundingRect(self) -> QRectF:
+        # Inclui a porcentagem da porta local (canto superior esquerdo, fora do
+        # corpo) e a moldura de destaque
+        return QRectF(-GAP, -GAP, BODY + GAP + 6, BODY + GAP + 6)
 
-        self.south_LOW_Label.setGeometry(QRect(40, 110, 40, 20))
-        self.in_south_LOW.setGeometry(QRect(70, 160, 20, 30))
-        self.out_south_LOW.setGeometry(QRect(117, 160, 6, 30))
+    def shape(self) -> QPainterPath:
+        # Só o corpo recebe cliques e hover
+        path = QPainterPath()
+        path.addRect(self.body_rect())
+        return path
 
-        self.weast_LOW_Label.setGeometry(QRect(1, 70, 40, 20))
-        self.in_weast_LOW.setGeometry(QRect(0, 100, 30, 20))
-        self.out_weast_LOW.setGeometry(QRect(0, 70, 30, 6))
+    def _label_rect(self, side: str, position: float) -> QRectF:
+        width, height, pad = 44, 14, 4
+        if side == "E":
+            return QRectF(BODY - width - pad, position - height / 2, width, height)
+        if side == "W":
+            return QRectF(pad, position - height / 2, width, height)
+        if side == "N":
+            return QRectF(position - width / 2, pad, width, height)
+        return QRectF(position - width / 2, BODY - height - pad, width, height)
+
+    def paint(self, painter: QPainter, option, widget=None) -> None:
+        colors = self.scene().colors
+        body = self.body_rect()
+
+        painter.setPen(QPen(QColor(_BODY_BORDER), 2.5 if self._hovered else 1.2))
+        painter.setBrush(QColor(_ROUTER_COLORS.get(self.pe_type, _ROUTER_COLORS[MPSoCConfig.SLAVE])))
+        painter.drawRect(body)
+
+        # O corpo tem cor clara nos dois temas: textos internos sempre pretos
+        painter.setPen(QColor("#000000"))
+        painter.setFont(self._name_font)
+        painter.drawText(body, Qt.AlignmentFlag.AlignCenter, self.label)
+
+        painter.setFont(self._percent_font)
+        for (side, channel), text in self._loads.items():
+            position = self._channels.get(channel)
+            if position is None:
+                continue
+            align = {"E": Qt.AlignmentFlag.AlignRight, "W": Qt.AlignmentFlag.AlignLeft}.get(
+                side, Qt.AlignmentFlag.AlignHCenter)
+            painter.drawText(self._label_rect(side, position), align | Qt.AlignmentFlag.AlignVCenter, text)
+
+        # Porta local: acima das setas diagonais, no canto fora do corpo
+        painter.setPen(QColor(colors.text))
+        painter.drawText(QRectF(-GAP + 2, -GAP + 1, 46, 13), Qt.AlignmentFlag.AlignLeft, self._local_load)
+
+        if self.highlighted:
+            painter.setPen(QPen(QColor(_HIGHLIGHT), 4))
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.drawRoundedRect(body.adjusted(-4, -4, 4, 4), 6, 6)
+
+    # ---------- interação ----------
+    def hoverEnterEvent(self, event):
+        self._hovered = True
+        self.update()
+        super().hoverEnterEvent(event)
+
+    def hoverLeaveEvent(self, event):
+        self._hovered = False
+        self.update()
+        super().hoverLeaveEvent(event)
+
+    def mousePressEvent(self, event):
+        # Aceitar o clique impede que a vista comece a arrastar a partir do roteador
+        if event.button() == Qt.MouseButton.LeftButton:
+            event.accept()
+        else:
+            super().mousePressEvent(event)
 
     def mouseReleaseEvent(self, event):
-        if self.router.geometry().contains(event.position().toPoint()):
+        if event.button() == Qt.MouseButton.LeftButton and self.body_rect().contains(event.pos()):
             self.clicked.emit(self.router_address)
         super().mouseReleaseEvent(event)
 
+    # ---------- estado da simulação ----------
     def reset_arrows(self) -> None:
         """Volta todas as setas para o estado normal (sem pacote passando)."""
         self.need_reset = False
-
-        self._painter.set_image(self.router, _ROUTER_IMAGES.get(self.pe_type, "Router.png"))
-        self._painter.set_image(self.local_in, "local_in.png")
-        self._painter.set_image(self.local_out, "local_out.png")
-
-        # Setas de bordas sem vizinho ficam vazias; só aparecem (em vermelho)
-        # quando um pacote de periférico passa por elas
-        sides = (
-            (_WEST_ARROWS, self.pos_x != 0),
-            (_EAST_ARROWS, self.pos_x != self.mpsoc_x - 1),
-            (_SOUTH_ARROWS, self.pos_y != 0),
-            (_NORTH_ARROWS, self.pos_y != self.mpsoc_y - 1),
-        )
-
-        for side, has_neighbor in sides:
-            for widget_name, image in side.items():
-                self._painter.set_image(getattr(self, widget_name), image if has_neighbor else None)
+        for arrow in self.arrows.values():
+            arrow.set_painted(False)
+        if self.highlighted:
+            self.highlighted = False
+            self.update()
 
     def paint_arrow(self, arrow: int) -> None:
-        """Pinta de vermelho a seta indicada (constantes *_IN_*/*_OUT_* do MPSoCConfig)."""
-        if arrow not in _ARROWS:
-            return
+        """Pinta de vermelho a seta indicada (constantes *_IN_*/*_OUT_*/LOCAL_* do MPSoCConfig)."""
+        item = self.arrows.get(arrow)
+        if item is not None:
+            self.need_reset = True
+            item.set_painted(True)
 
-        widget_name, image = _ARROWS[arrow]
-        self.need_reset = True
-        self._painter.set_image(getattr(self, widget_name), image)
+    def set_highlight(self, on: bool = True) -> None:
+        """Moldura laranja em volta do roteador (some no próximo reset das setas)."""
+        self.highlighted = on
+        if on:
+            self.need_reset = True
+        self.update()
+
+    def set_peripheral(self, side: str, name: str) -> None:
+        """Mostra o periférico `name` ligado à porta de borda `side` ("N", "S", "E" ou "W")."""
+        if self.peripherals.get(side) == name:
+            return
+        self.peripherals[side] = name
+        if self._peripheral_added is not None:
+            self._peripheral_added(self, side, name)
 
     def update_throughput(self, port: int, value: float) -> None:
         """Atualiza o percentual de uso do enlace da porta física informada."""
-        label_name = _PORT_LABELS.get(port)
-        if label_name is not None:
-            self.set_link_load(getattr(self, label_name), value)
+        text = _format_load(value)
+        if port in _LOCAL_PORTS:
+            changed = self._local_load != text
+            self._local_load = text
+        elif port in _PORT_SIDES:
+            key = _PORT_SIDES[port]
+            changed = self._loads[key] != text
+            self._loads[key] = text
+        else:
+            return
+        if changed:
+            self.update()
 
-    def set_link_load(self, direction_label: QWidget, value: float) -> None:
-        """
-        Atualiza o percentual mostrado em um dos rótulos de enlace
-        (north_HIGH_Label, south_LOW_Label, etc.).
-        """
-        value = min(value, 99.99)
-        direction_label.setText(f"{value:05.2f}%")
+    def link_load(self, port: int) -> str:
+        """Texto mostrado para a taxa de uso da porta (usado nos testes)."""
+        if port in _LOCAL_PORTS:
+            return self._local_load
+        return self._loads[_PORT_SIDES[port]]
 
 
-class RouterMatrixWidget(QWidget):
+# ==========================================
+# VISTA DA MALHA
+# ==========================================
+class _ZoomControls(QFrame):
+    """Botões de zoom no canto inferior direito da vista."""
+
+    def __init__(self, view: "RouterMatrixWidget"):
+        super().__init__(view)
+        self.setObjectName("zoomControls")
+        self.setFrameShape(QFrame.Shape.StyledPanel)
+        self.setAutoFillBackground(True)
+
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(3, 2, 3, 2)
+        layout.setSpacing(2)
+
+        def button(text, tooltip, slot):
+            tool = QToolButton(self)
+            tool.setText(text)
+            tool.setToolTip(tooltip)
+            tool.setAutoRaise(True)
+            tool.clicked.connect(slot)
+            layout.addWidget(tool)
+            return tool
+
+        button("−", "Zoom out (Ctrl+-)", view.zoom_out)
+        self.label = QLabel(self)
+        self.label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.label.setMinimumWidth(44)
+        self.label.setToolTip("Zoom level - Ctrl + mouse wheel to zoom")
+        layout.addWidget(self.label)
+        button("+", "Zoom in (Ctrl++)", view.zoom_in)
+        button("1:1", "Actual size (Ctrl+0)", view.reset_zoom)
+        button("Fit", "Fit the mesh to the window (double-click the background)", view.fit_to_view)
+
+    def set_zoom(self, zoom: float) -> None:
+        self.label.setText(f"{round(zoom * 100)}%")
+
+
+class RouterMatrixWidget(QGraphicsView):
     """
-    Widget que organiza mpsoc_x * mpsoc_y roteadores em uma grade única,
-    desenhando uma borda a cada bloco de cluster_x por cluster_y roteadores
-    apenas para separação visual (sem alterar o total de roteadores).
+    Vista com os mpsoc_x * mpsoc_y roteadores, desenhando uma borda a cada
+    bloco de cluster_x por cluster_y roteadores apenas para separação visual
+    (sem alterar o total de roteadores).
     """
+
+    zoom_changed = Signal(float)
 
     def __init__(self, mpsoc_x: int, mpsoc_y: int,
                  cluster_x: int, cluster_y: int, parent=None, mpsoc_config=None):
-        super().__init__(parent)
+        self._scene = _MeshScene()
+        super().__init__(self._scene, parent)
+        self._scene.setParent(self)
 
         self.mpsoc_config = mpsoc_config
-
-        # Fundo e cores da grade seguem o tema (ver apply_theme)
-        self.setObjectName("routerMatrix")
-        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
-
-        # mpsoc_x/mpsoc_y é o tamanho TOTAL da malha.
         self.total_cols = max(1, mpsoc_x)
         self.total_rows = max(1, mpsoc_y)
 
-        # cluster_x/cluster_y é o tamanho de cada bloco visual; se não
-        # definido (0) ou maior que a própria malha, cai para "sem cluster"
-        # (um bloco único, sem bordas internas).
+        # cluster_x/cluster_y é o tamanho de cada bloco visual; se não definido
+        # (0) ou maior que a própria malha, cai para "sem cluster"
         self.cluster_x = max(1, min(cluster_x, self.total_cols)) if cluster_x else self.total_cols
         self.cluster_y = max(1, min(cluster_y, self.total_rows)) if cluster_y else self.total_rows
 
-        # Guarda referência de cada roteador por posição global (x, y)
-        # e pelo endereço hamiltoniano usado no traffic_router.txt
-        self.routers: dict[tuple[int, int], RouterWidget] = {}
-        self.routers_by_address: dict[int, RouterWidget] = {}
+        # Roteadores por posição global (x, y) e pelo endereço hamiltoniano
+        # usado no traffic_router.txt
+        self.routers: dict[tuple[int, int], RouterItem] = {}
+        self.routers_by_address: dict[int, RouterItem] = {}
+        self.peripheral_items: dict[tuple[int, int, str], PeripheralItem] = {}
+        self._cluster_items: list[QGraphicsRectItem] = []
+        self._channels = _channel_positions(mpsoc_config)
+
+        self._zoom = 1.0
+        # Até o usuário mexer no zoom, a malha acompanha o tamanho da janela
+        self._auto_fit = True
+
+        self.setObjectName("routerMatrix")
+        self.setRenderHints(QPainter.RenderHint.Antialiasing | QPainter.RenderHint.TextAntialiasing)
+        self.setDragMode(QGraphicsView.DragMode.ScrollHandDrag)
+        self.setTransformationAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
+        self.setResizeAnchor(QGraphicsView.ViewportAnchor.AnchorViewCenter)
+        self.setViewportUpdateMode(QGraphicsView.ViewportUpdateMode.SmartViewportUpdate)
+        self.setFrameShape(QFrame.Shape.NoFrame)
+        self.viewport().grabGesture(Qt.GestureType.PinchGesture)
 
         self._build_matrix()
 
+        self._controls = _ZoomControls(self)
+        self._controls.set_zoom(self._zoom)
+
+        for keys, slot in ((QKeySequence.StandardKey.ZoomIn, self.zoom_in),
+                           (QKeySequence.StandardKey.ZoomOut, self.zoom_out),
+                           ("Ctrl+=", self.zoom_in),
+                           ("Ctrl+0", self.reset_zoom)):
+            shortcut = QShortcut(QKeySequence(keys), self)
+            shortcut.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
+            shortcut.activated.connect(slot)
+
+    # ---------- construção ----------
+    def _body_origin(self, x: int, y: int) -> QPointF:
+        # Linha 0 da cena = topo: invertemos o Y para o 0x0 ficar embaixo
+        return QPointF(x * PITCH, (self.total_rows - 1 - y) * PITCH)
+
     def _build_matrix(self) -> None:
-        n_clusters_x = math.ceil(self.total_cols / self.cluster_x)
-        n_clusters_y = math.ceil(self.total_rows / self.cluster_y)
-
-        draw_borders = self.cluster_x < self.total_cols or self.cluster_y < self.total_rows
-
-        outer_layout = QGridLayout(self)
-        # Roteadores grudados uns nos outros: só deixamos um pequeno
-        # espaçamento entre blocos quando existe borda de cluster separando
-        # eles; sem clusters, a malha fica totalmente colada (spacing 0).
-        outer_layout.setSpacing(2 if draw_borders else 0)
-        outer_layout.setContentsMargins(0, 0, 0, 0)
-
-        # Clusters em coordenadas de "cluster" (cx, cy), com cy=0 embaixo
-        for cluster_y in range(n_clusters_y):
-            for cluster_x in range(n_clusters_x):
-                cluster_widget = self._build_cluster(
-                    cluster_x, cluster_y, draw_borders
-                )
-
-                # Linha 0 do grid = topo da janela, então invertemos o Y
-                # para que o cluster (0,0) fique embaixo, como no print.
-                grid_row = n_clusters_y - 1 - cluster_y
-                outer_layout.addWidget(cluster_widget, grid_row, cluster_x)
-
-        self.setLayout(outer_layout)
-
-    def _build_cluster(self, cluster_x: int, cluster_y: int,
-                        draw_borders: bool) -> QFrame:
-        """
-        Cria um bloco visual contendo até cluster_x * cluster_y roteadores
-        (o último bloco de cada linha/coluna pode ter menos roteadores caso
-        a dimensão total não seja múltipla do tamanho do cluster).
-        """
-        cluster_frame = QFrame()
-        cluster_frame.setObjectName(f"cluster_{cluster_x}x{cluster_y}")
-
-        if draw_borders:
-            cluster_frame.setFrameShape(QFrame.Shape.Box)
-            cluster_frame.setFrameShadow(QFrame.Shadow.Plain)
-            cluster_frame.setLineWidth(1)
-            # A cor da borda vem da folha de estilo da matriz (_matrix_stylesheet)
-            cluster_frame.setProperty("clusterFrame", True)
-
-        cluster_layout = QGridLayout(cluster_frame)
-        cluster_layout.setSpacing(0)
-        # Roteadores dentro do bloco ficam colados; só reservamos uma borda
-        # (via margem) quando o bloco realmente representa um cluster.
-        margin = 1 if draw_borders else 0
-        cluster_layout.setContentsMargins(margin, margin, margin, margin)
-
-        # Início (inclusive) e fim (exclusivo) deste bloco na malha total
-        x_start = cluster_x * self.cluster_x
-        x_end = min(x_start + self.cluster_x, self.total_cols)
-        y_start = cluster_y * self.cluster_y
-        y_end = min(y_start + self.cluster_y, self.total_rows)
-
-        block_rows = y_end - y_start
-
-        for global_y in range(y_start, y_end):
-            for global_x in range(x_start, x_end):
-                router = RouterWidget(global_x, global_y, cluster_frame,
-                                      self.total_cols, self.total_rows, self.mpsoc_config)
-                self.routers[(global_x, global_y)] = router
+        for y in range(self.total_rows):
+            for x in range(self.total_cols):
+                router = RouterItem(x, y, self.total_cols, self.total_rows, self.mpsoc_config)
+                router.setPos(self._body_origin(x, y))
+                router._peripheral_added = self._add_peripheral
+                self._scene.addItem(router)
+                self.routers[(x, y)] = router
                 self.routers_by_address[router.router_address] = router
+                self._add_local_arrows(router)
 
-                local_x = global_x - x_start
-                # Linha 0 do grid = topo, então invertemos o Y local também
-                local_row = block_rows - 1 - (global_y - y_start)
-                cluster_layout.addWidget(router, local_row, local_x)
+        for (x, y), router in self.routers.items():
+            for side in ("E", "N"):
+                neighbor = self.get_router(x + 1, y) if side == "E" else self.get_router(x, y + 1)
+                if neighbor is not None:
+                    self._add_link(router, side, neighbor)
+            for side, at_border in (("W", x == 0), ("E", x == self.total_cols - 1),
+                                    ("S", y == 0), ("N", y == self.total_rows - 1)):
+                if at_border:
+                    self._add_link(router, side, None)
 
-        cluster_frame.setLayout(cluster_layout)
-        return cluster_frame
+        if self.cluster_x < self.total_cols or self.cluster_y < self.total_rows:
+            self._add_cluster_borders()
 
-    def get_router(self, x: int, y: int) -> RouterWidget | None:
-        """Retorna o RouterWidget na posição global (x, y), se existir."""
+        self._update_scene_rect()
+
+    def _edge_point(self, router: RouterItem, side: str, position: float, distance: float) -> QPointF:
+        """Ponto a `distance` para fora do lado `side`, a `position` ao longo dele."""
+        origin = router.pos()
+        dx, dy = _OUTWARD[side]
+        if side in ("E", "W"):
+            edge_x = origin.x() + (BODY if side == "E" else 0)
+            return QPointF(edge_x + dx * distance, origin.y() + position)
+        edge_y = origin.y() + (BODY if side == "S" else 0)
+        return QPointF(origin.x() + position, edge_y + dy * distance)
+
+    def _add_link(self, router: RouterItem, side: str, neighbor: RouterItem | None) -> None:
+        """
+        Setas do lado `side` do roteador, uma por sentido e por canal. Com
+        `neighbor` None é uma borda da malha: as setas ligam o roteador ao
+        periférico e ficam ocultas até existir um (ou um pacote passar).
+        """
+        near, far = ARROW_MARGIN, GAP - ARROW_MARGIN
+        # Desloca o par perpendicularmente: a saída fica "à esquerda" de quem sai
+        out_shift = -ARROW_OFFSET if side in ("E", "S") else ARROW_OFFSET
+        other = neighbor.label if neighbor is not None else f"{_SIDE_NAMES[side]} peripheral"
+
+        for channel, position in self._channels.items():
+            channel_name = "HIGH" if channel == HIGH else "LOW"
+            out_pos, in_pos = position + out_shift, position - out_shift
+
+            outgoing = ArrowItem(self._edge_point(router, side, out_pos, near),
+                                 self._edge_point(router, side, out_pos, far),
+                                 optional=neighbor is None,
+                                 tooltip=f"{router.label} → {other} ({channel_name})")
+            incoming = ArrowItem(self._edge_point(router, side, in_pos, far),
+                                 self._edge_point(router, side, in_pos, near),
+                                 optional=neighbor is None,
+                                 tooltip=f"{other} → {router.label} ({channel_name})")
+            self._scene.addItem(outgoing)
+            self._scene.addItem(incoming)
+
+            in_arrow, out_arrow = _SIDE_ARROWS[(side, channel)]
+            router.arrows[out_arrow] = outgoing
+            router.arrows[in_arrow] = incoming
+            if neighbor is not None:
+                neighbor_in, neighbor_out = _SIDE_ARROWS[(_OPPOSITE[side], channel)]
+                neighbor.arrows[neighbor_in] = outgoing
+                neighbor.arrows[neighbor_out] = incoming
+
+    def _add_local_arrows(self, router: RouterItem) -> None:
+        """Setas diagonais da porta local, no canto superior esquerdo do corpo."""
+        corner = router.pos()
+        shift = QPointF(5, -5)      # perpendicular à diagonal
+        near, far = QPointF(-ARROW_MARGIN, -ARROW_MARGIN), QPointF(-GAP * 0.6, -GAP * 0.6)
+
+        local_in = ArrowItem(corner + far + shift, corner + near + shift,
+                             tooltip=f"PE → router {router.label} (local port)")
+        local_out = ArrowItem(corner + near - shift, corner + far - shift,
+                              tooltip=f"Router {router.label} → PE (local port)")
+        self._scene.addItem(local_in)
+        self._scene.addItem(local_out)
+        router.arrows[MPSoCConfig.LOCAL_IN] = local_in
+        router.arrows[MPSoCConfig.LOCAL_OUT] = local_out
+
+    def _add_peripheral(self, router: RouterItem, side: str, name: str) -> None:
+        key = (router.pos_x, router.pos_y, side)
+        old = self.peripheral_items.pop(key, None)
+        if old is not None:
+            self._scene.removeItem(old)
+
+        size = PERIPHERAL_NS if side in ("N", "S") else PERIPHERAL_EW
+        center = self._edge_point(router, side, BODY / 2, GAP + (size.height() if side in ("N", "S")
+                                                                  else size.width()) / 2)
+        rect = QRectF(center.x() - size.width() / 2, center.y() - size.height() / 2,
+                      size.width(), size.height())
+        item = PeripheralItem(rect, name, router.label, side)
+        self._scene.addItem(item)
+        self.peripheral_items[key] = item
+
+        for channel in self._channels:
+            for arrow in _SIDE_ARROWS[(side, channel)]:
+                router.arrows[arrow].set_optional(False)
+
+        self._update_scene_rect()
+
+    def _add_cluster_borders(self) -> None:
+        half = GAP / 2
+        for cy in range(math.ceil(self.total_rows / self.cluster_y)):
+            for cx in range(math.ceil(self.total_cols / self.cluster_x)):
+                x0, y0 = cx * self.cluster_x, cy * self.cluster_y
+                x1 = min(x0 + self.cluster_x, self.total_cols) - 1
+                y1 = min(y0 + self.cluster_y, self.total_rows) - 1
+                top_left = self._body_origin(x0, y1)
+                bottom_right = self._body_origin(x1, y0) + QPointF(BODY, BODY)
+                rect = QRectF(top_left, bottom_right).adjusted(-half + 2, -half + 2, half - 2, half - 2)
+
+                item = QGraphicsRectItem(rect)
+                item.setZValue(0)
+                item.setBrush(Qt.BrushStyle.NoBrush)
+                self._scene.addItem(item)
+                self._cluster_items.append(item)
+        self._apply_cluster_pen()
+
+    def _apply_cluster_pen(self) -> None:
+        pen = QPen(QColor(self._scene.colors.cluster_border), 1.5, Qt.PenStyle.DashLine)
+        for item in self._cluster_items:
+            item.setPen(pen)
+
+    def _update_scene_rect(self) -> None:
+        # Todas as setas de borda contam (mesmo ocultas), para a cena não mudar
+        # de tamanho quando um pacote de periférico aparece
+        rect = QRectF()
+        for item in self._scene.items():
+            rect = rect.united(item.sceneBoundingRect())
+        self._scene.setSceneRect(rect.adjusted(-16, -16, 16, 16))
+
+    # ---------- API usada pela janela principal e pela simulação ----------
+    def get_router(self, x: int, y: int) -> RouterItem | None:
+        """Retorna o roteador na posição global (x, y), se existir."""
         return self.routers.get((x, y))
 
-    def apply_theme(self, dark: bool) -> None:
-        """Aplica as cores do tema claro ou escuro na grade."""
-        self.setStyleSheet(_matrix_stylesheet(dark))
-
-    def get_router_by_address(self, router_address: int) -> RouterWidget | None:
-        """Retorna o RouterWidget pelo endereço hamiltoniano, se existir."""
+    def get_router_by_address(self, router_address: int) -> RouterItem | None:
+        """Retorna o roteador pelo endereço hamiltoniano, se existir."""
         return self.routers_by_address.get(router_address)
+
+    def set_peripherals(self, peripherals) -> None:
+        """Periféricos (testcase_files.Peripheral) nas bordas da malha."""
+        for peripheral in peripherals:
+            router = self.get_router(peripheral.x, peripheral.y)
+            if router is not None:
+                router.set_peripheral(peripheral.side, peripheral.name)
 
     def reset_routers(self) -> None:
         """Apaga as setas pintadas de todos os roteadores."""
         for router in self.routers.values():
             if router.need_reset:
                 router.reset_arrows()
+
+    def apply_theme(self, dark: bool) -> None:
+        """Aplica as cores do tema claro ou escuro na malha."""
+        self._scene.colors = theme.matrix_colors(dark)
+        self.setBackgroundBrush(QBrush(QColor(self._scene.colors.canvas)))
+        self._apply_cluster_pen()
+        self._scene.update()
+
+    def ensure_router_visible(self, router: RouterItem) -> None:
+        self.ensureVisible(router.sceneBoundingRect(), 20, 20)
+
+    def to_image(self, scale: float = 2.0) -> QImage:
+        """A malha inteira (independente do zoom e da rolagem) como imagem."""
+        source = self._scene.sceneRect()
+        image = QImage(max(1, round(source.width() * scale)), max(1, round(source.height() * scale)),
+                       QImage.Format.Format_ARGB32)
+        image.fill(QColor(self._scene.colors.canvas))
+        painter = QPainter(image)
+        painter.setRenderHints(QPainter.RenderHint.Antialiasing | QPainter.RenderHint.TextAntialiasing)
+        self._scene.render(painter, QRectF(image.rect()), source)
+        painter.end()
+        return image
+
+    # ---------- zoom ----------
+    @property
+    def zoom(self) -> float:
+        return self._zoom
+
+    def set_zoom(self, zoom: float, user: bool = True) -> None:
+        zoom = max(ZOOM_MIN, min(ZOOM_MAX, zoom))
+        if user:
+            self._auto_fit = False
+        if math.isclose(zoom, self._zoom):
+            return
+        self.scale(zoom / self._zoom, zoom / self._zoom)
+        self._zoom = zoom
+        self._controls.set_zoom(zoom)
+        self.zoom_changed.emit(zoom)
+
+    def zoom_in(self) -> None:
+        self.set_zoom(self._zoom * ZOOM_STEP)
+
+    def zoom_out(self) -> None:
+        self.set_zoom(self._zoom / ZOOM_STEP)
+
+    def reset_zoom(self) -> None:
+        self.set_zoom(1.0)
+
+    def fit_to_view(self, user: bool = True) -> None:
+        """Ajusta o zoom para a malha inteira caber na vista."""
+        rect = self._scene.sceneRect()
+        viewport = self.viewport().size()
+        if rect.isEmpty() or viewport.isEmpty():
+            return
+        zoom = min(viewport.width() / rect.width(), viewport.height() / rect.height())
+        anchor = self.transformationAnchor()
+        self.setTransformationAnchor(QGraphicsView.ViewportAnchor.AnchorViewCenter)
+        self.set_zoom(zoom, user)
+        self.setTransformationAnchor(anchor)
+        self.centerOn(rect.center())
+        if user:
+            # "Fit" volta a acompanhar o tamanho da janela
+            self._auto_fit = True
+
+    def _auto_zoom(self) -> None:
+        """Zoom inicial: 100%, ou menos se a malha não couber na janela."""
+        if not self._auto_fit:
+            return
+        rect = self._scene.sceneRect()
+        viewport = self.viewport().size()
+        if rect.isEmpty() or viewport.isEmpty():
+            return
+        fit = min(viewport.width() / rect.width(), viewport.height() / rect.height())
+        if fit < 1:
+            self.fit_to_view(user=False)
+        else:
+            self.set_zoom(1.0, user=False)
+            self.centerOn(rect.center())
+
+    def wheelEvent(self, event):
+        if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
+            steps = event.angleDelta().y() / 120
+            if steps:
+                self.set_zoom(self._zoom * ZOOM_STEP ** steps)
+            event.accept()
+            return
+        super().wheelEvent(event)
+
+    def viewportEvent(self, event):
+        if event.type() == QEvent.Type.Gesture:
+            pinch = event.gesture(Qt.GestureType.PinchGesture)
+            if pinch is not None:
+                self.set_zoom(self._zoom * pinch.scaleFactor())
+                event.accept()
+                return True
+        elif event.type() == QEvent.Type.NativeGesture and \
+                event.gestureType() == Qt.NativeGestureType.ZoomNativeGesture:
+            self.set_zoom(self._zoom * (1 + event.value()))
+            event.accept()
+            return True
+        return super().viewportEvent(event)
+
+    def mouseDoubleClickEvent(self, event):
+        if self.itemAt(event.position().toPoint()) is None:
+            self.fit_to_view()
+            event.accept()
+            return
+        super().mouseDoubleClickEvent(event)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        margin = 8
+        viewport = self.viewport().geometry()
+        self._controls.adjustSize()
+        self._controls.move(viewport.right() - self._controls.width() - margin,
+                            viewport.bottom() - self._controls.height() - margin)
+        self._controls.raise_()
+        # Adia para depois do layout terminar (o viewport já com o tamanho final)
+        QTimer.singleShot(0, self, self._auto_zoom)
