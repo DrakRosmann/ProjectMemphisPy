@@ -19,7 +19,7 @@ from PySide6.QtWidgets import (QComboBox, QHBoxLayout, QLabel, QListWidget, QLis
                                QMessageBox, QPushButton, QRadioButton, QTabWidget, QVBoxLayout, QWidget)
 
 import analysis
-from util.MPSoCConfig import MPSoCConfig
+from MPSoCConfig import MPSoCConfig
 
 # Serviço sempre descartado pelo filtro do Java
 IGNORED_SERVICE = "SLACK_TIME_REPORT"

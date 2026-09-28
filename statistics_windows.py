@@ -19,7 +19,7 @@ import analysis
 import export
 import path_view
 from overview_windows import _LiveOverview, _router_label
-from util.MPSoCConfig import MPSoCConfig
+from MPSoCConfig import MPSoCConfig
 
 
 def _ticks_to_us(mpsoc_config, ticks):

@@ -1,7 +1,7 @@
 """Leitura do traffic_router.txt e estado dos roteadores."""
 
 from information import MPSoCInformation
-from util.MPSoCConfig import MPSoCConfig
+from MPSoCConfig import MPSoCConfig
 
 
 def test_all_packets_read(packets):
@@ -64,9 +64,8 @@ def test_port_names():
 def test_follow_reads_lines_as_they_are_written(tmp_path, debug_dir):
     import shutil
 
-    from information.read_traffic_data import ReadTrafficData
-    from information.router_neighbors import RouterNeighbors
-    from util.MPSoCConfig import MPSoCConfig
+    from information import ReadTrafficData, RouterNeighbors
+    from MPSoCConfig import MPSoCConfig
 
     debug = tmp_path / "debug"
     shutil.copytree(debug_dir, debug)

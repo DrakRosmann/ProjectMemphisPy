@@ -19,10 +19,9 @@ from PySide6.QtWidgets import (QComboBox, QHBoxLayout, QHeaderView, QLabel, QLis
 import analysis
 import export
 from commsUi import Ui_Form as Ui_CommunicationOverview
-from pe_matrix import PEMatrixWidget
-from slave_matrix import SlaveMatrixWidget
+from overview_matrices import PEMatrixWidget, SlaveMatrixWidget
 from taskmap import Ui_TaskMap
-from util.MPSoCConfig import MPSoCConfig
+from MPSoCConfig import MPSoCConfig
 
 IMAGES_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "images")
 
