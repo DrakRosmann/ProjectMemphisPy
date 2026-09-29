@@ -45,15 +45,14 @@ def debug_dir(scenario_dir):
 
 @pytest.fixture(scope="session")
 def config(debug_dir):
-    from util.MPSoCConfig import MPSoCConfig
+    from MPSoCConfig import MPSoCConfig
     return MPSoCConfig(debug_dir)
 
 
 @pytest.fixture(scope="session")
 def packets(config):
     """Todos os pacotes do traffic_router.txt do exemplo."""
-    from information.read_traffic_data import ReadTrafficData
-    from information.router_neighbors import RouterNeighbors
+    from information import ReadTrafficData, RouterNeighbors
     reader = ReadTrafficData(config, RouterNeighbors.from_config(config))
     try:
         result = []

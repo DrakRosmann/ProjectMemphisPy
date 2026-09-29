@@ -3,8 +3,8 @@
 import pytest
 
 import analysis
-from information.packet_information import PacketInformation
-from util.MPSoCConfig import MPSoCConfig
+from information import PacketInformation
+from MPSoCConfig import MPSoCConfig
 
 REQUEST = 41
 BROADCAST = 0

@@ -8,7 +8,7 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QFileDialog, QMessageB
 
 import theme
 from ui_mainwindow import MainWindow
-from util import MPSoCConfig
+import MPSoCConfig
 from information import MPSoCInformation
 from router_matrix import RouterMatrixWidget
 from simulation import SimulationController, MAX_REPAINT_SPEED, ticks_to_ms
@@ -16,9 +16,8 @@ from overview_windows import CommunicationOverviewWindow, MessageLogWindow, Task
 from deloream import DeloreamWindow
 from statistics_windows import ApplicationTimelineWindow, TrafficStatisticsWindow
 from router_info_window import RouterInfoWindow
-from platform_setup import PlatformSetupDialog
+from dialogs import AboutDialog, PlatformSetupDialog, show_packet_format
 from filter_window import FilterWindow
-from help_dialogs import AboutDialog, show_packet_format
 import projects
 import export
 import path_view

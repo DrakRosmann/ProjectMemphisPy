@@ -15,7 +15,7 @@ import re
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 
-from util.MPSoCConfig import MPSoCConfig
+from MPSoCConfig import MPSoCConfig
 
 # ID usado para "tarefa" do kernel/injetor nos campos de tarefa do traffic_router.txt
 KERNEL_TASK_ID = 0xFFFF
@@ -345,8 +345,7 @@ class TrafficTracker:
 
 def read_all_packets(mpsoc_config):
     """Todos os pacotes do traffic_router.txt, com um leitor próprio (não mexe na simulação)."""
-    from information.read_traffic_data import ReadTrafficData
-    from information.router_neighbors import RouterNeighbors
+    from information import ReadTrafficData, RouterNeighbors
 
     reader = ReadTrafficData(mpsoc_config, RouterNeighbors.from_config(mpsoc_config))
     packets = []

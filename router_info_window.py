@@ -28,7 +28,7 @@ import analysis
 import export
 import path_view
 from overview_windows import _LiveOverview, _router_label
-from util.MPSoCConfig import MPSoCConfig
+from MPSoCConfig import MPSoCConfig
 
 ICON_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "icon")
 

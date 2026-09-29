@@ -43,7 +43,7 @@ from PySide6.QtWidgets import (QFrame, QGraphicsItem, QGraphicsObject, QGraphics
                                QGraphicsView, QHBoxLayout, QLabel, QToolButton)
 
 import theme
-from util.MPSoCConfig import MPSoCConfig
+from MPSoCConfig import MPSoCConfig
 
 
 # ==========================================

@@ -8,7 +8,7 @@ QTimer, que roda no laço de eventos do Qt e pode atualizar a interface com segu
 
 from PySide6.QtCore import QObject, QTimer, Signal
 
-from util.MPSoCConfig import MPSoCConfig
+from MPSoCConfig import MPSoCConfig
 
 # Velocidade (slider 0-100) acima da qual os roteadores não são redesenhados,
 # para avançar o mais rápido possível

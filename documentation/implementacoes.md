@@ -7,9 +7,9 @@ Este documento descreve as funcionalidades portadas do [GraphicalDebugger origin
 1. [Visão geral](#1-visão-geral)
 2. [Estrutura de arquivos](#2-estrutura-de-arquivos)
 3. [Abrindo um debug](#3-abrindo-um-debug)
-4. [Configuração da plataforma — `util/MPSoCConfig.py`](#4-configuração-da-plataforma--utilmpsocconfigpy)
+4. [Configuração da plataforma — `MPSoCConfig.py`](#4-configuração-da-plataforma--mpsocconfigpy)
 5. [Task List e Services List](#5-task-list-e-services-list)
-6. [Modelo de tráfego — pacote `information/`](#6-modelo-de-tráfego--pacote-information)
+6. [Modelo de tráfego — `information.py`](#6-modelo-de-tráfego--informationpy)
 7. [Matriz de roteadores — `router_matrix.py`](#7-matriz-de-roteadores--router_matrixpy)
 8. [Simulação — `simulation.py`](#8-simulação--simulationpy)
 9. [Interface da simulação — `main.py`](#9-interface-da-simulação--mainpy)
@@ -43,12 +43,11 @@ diretório debug/
 | `main.py` | Janela principal: menus, botões, tabelas, ligação com a simulação | `MainFrame.java` |
 | `simulation.py` | Controle da simulação e janelas de checkpoint | `MainFrame.java` (parte de simulação), `CheckpointController.java` |
 | `overview_windows.py` | Janelas Communication Overview, Task Mapping Overview e Message Log, atualizadas durante a simulação | `CommunicationOverview.java`, `TaskMappingFrame.java`, `MainFrame.showMessageList` |
-| `slave_matrix.py` / `pe_matrix.py` | Células das grades das duas janelas acima | — |
+| `overview_matrices.py` | Células das grades das duas janelas acima (`SlaveMatrixWidget`, `PEMatrixWidget`) | — |
 | `router_info_window.py` | Janela "Router Information" (clique num roteador): abas Log, Applications, Scheduling e Traffic, janela Task Information e gráfico de escalonamento | `RouterInfoFrame.java`, `PETextLog.java`, `SchedulingTab.java`, `scheduling/SchedulingPanel.java`, `TaskInfoFrame.java` |
-| `platform_setup.py` | Janela Platform Setup (menu Edit): flit size, período de clock e largura da janela de checkpoint | `PlatformSetupFrame.java` |
 | `filter_window.py` | Janela Service and PE Filter (menu Filters, Ctrl+F): escolhe quais pacotes a simulação processa, por serviço (Only/Except) e por PE | `FilterForm.java` |
 | `projects.py` | Projetos salvos (`.hdf`): File → Save / Open / Delete Project | `MainFrame.java` (save/open/deleteMenuItem) |
-| `help_dialogs.py` | Help → About e Help → Packet Format | `util/AboutFrame.java`, `MainFrame.packetFormatMenuItemActionPerformed` |
+| `dialogs.py` | Janela Platform Setup (menu Edit: flit size, período de clock e largura da janela de checkpoint), Help → About e Help → Packet Format | `PlatformSetupFrame.java`, `util/AboutFrame.java`, `MainFrame.packetFormatMenuItemActionPerformed` |
 | `analysis.py` | Análises sem interface: aplicação de cada pacote, latência (casamento injeção → entrega), vazão em Mbps e linha do tempo da admissão de aplicações | — (métricas do artigo do Memphis, DAES 2019) |
 | `statistics_windows.py` | Janelas Traffic Statistics (Links, Applications, Messages, Routing, Blocked) e Application Timeline (menu Tools) | — |
 | `path_view.py` | Liga as janelas de análise à malha principal: duplo clique num pacote pinta o caminho dele e destaca o roteador | — |
@@ -58,15 +57,9 @@ diretório debug/
 | `deloream.py` | Deloream: leitor das mensagens `$$$` das tarefas nos logs dos processadores | `deloream/DeloreamMainFrame.java`, `deloream/TaskMessage.java` |
 | `theme.py` | Paletas dos temas claro/escuro, cores da grade e preferência salva | — |
 | `router_matrix.py` | Desenho da grade e de cada roteador (imagens, setas, %) | `Roteador.java`, `UJPanelImagem.java`, `MainFrame.createNoCPanel` |
-| `util/MPSoCConfig.py` | Leitura de `platform.cfg` e `services.cfg`, constantes e endereçamento | `util/MPSoCConfig.java` |
-| `information/packet_information.py` | Um pacote do `traffic_router.txt` | `PacketInformation.java` |
-| `information/task_information.py` | Um evento de tarefa em um PE | `TaskInformation.java` |
-| `information/port_information.py` | Volume/banda acumulados por porta | `PortInformation.java` |
-| `information/router_information.py` | Pacotes, portas e tarefas de um roteador | `RouterInformation.java` |
-| `information/router_neighbors.py` | Vizinhos e conversão XY ↔ hamiltoniano | `RouterNeighbors.java` |
-| `information/read_traffic_data.py` | Leitura sob demanda do `traffic_router.txt` | `ReadTrafficData.java` |
-| `information/mpsoc_information.py` | Estado de todos os roteadores do MPSoC | `MPSoCInformation.java` |
-| `Roteador.py` / `ui_mainwindow.py` | Interfaces geradas a partir dos `.ui` (não editar à mão) | — |
+| `MPSoCConfig.py` | Leitura de `platform.cfg` e `services.cfg`, constantes e endereçamento | `util/MPSoCConfig.java` |
+| `information.py` | Modelo de tráfego: `PacketInformation` (um pacote), `TaskInformation` (evento de tarefa), `PortInformation` (volume/banda por porta), `RouterInformation` (pacotes, portas e tarefas de um roteador), `RouterNeighbors` (vizinhos e conversão XY ↔ hamiltoniano), `ReadTrafficData` (leitura sob demanda do `traffic_router.txt`) e `MPSoCInformation` (estado de todos os roteadores) | `PacketInformation.java`, `TaskInformation.java`, `PortInformation.java`, `RouterInformation.java`, `RouterNeighbors.java`, `ReadTrafficData.java`, `MPSoCInformation.java` |
+| `ui_mainwindow.py` / `commsUi.py` / `taskmap.py` | Interfaces geradas a partir dos `.ui` (não editar à mão) | — |
 
 ---
 
@@ -90,7 +83,7 @@ diretório debug/
 
 ---
 
-## 4. Configuração da plataforma — `util/MPSoCConfig.py`
+## 4. Configuração da plataforma — `MPSoCConfig.py`
 
 ### 4.1 Leitura do `platform.cfg`
 
@@ -172,7 +165,7 @@ As linhas `$TASK_…` do `services.cfg` não aparecem na Services List (não sã
 
 ---
 
-## 6. Modelo de tráfego — pacote `information/`
+## 6. Modelo de tráfego — `information.py`
 
 ### 6.1 Formato do `traffic_router.txt`
 
@@ -240,7 +233,7 @@ Com `router_addressing XY`, os endereços das colunas 1 e 6 são convertidos par
 
 ### 7.2 `RouterWidget`
 
-Reaproveita o layout do `Roteador.py` (gerado de `Roteador.ui`) e acrescenta:
+Reproduz o layout do `Roteador.ui` e acrescenta:
 
 | Recurso | Descrição |
 |---|---|

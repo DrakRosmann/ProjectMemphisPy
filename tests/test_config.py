@@ -2,7 +2,7 @@
 
 import pytest
 
-from util.MPSoCConfig import MPSoCConfig
+from MPSoCConfig import MPSoCConfig
 
 
 def test_platform(config):

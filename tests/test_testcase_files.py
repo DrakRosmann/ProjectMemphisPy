@@ -34,7 +34,7 @@ def test_example_testcase(config):
 
 
 def test_missing_yaml(tmp_path):
-    from util.MPSoCConfig import MPSoCConfig
+    from MPSoCConfig import MPSoCConfig
     debug = tmp_path / "scenario" / "debug"
     debug.mkdir(parents=True)
     (debug / "platform.cfg").write_text("mpsoc_x 2\nmpsoc_y 2\n")

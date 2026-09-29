@@ -121,7 +121,7 @@ def test_exports(window, tmp_path, monkeypatch):
 
 
 def test_platform_setup(window):
-    from platform_setup import PlatformSetupDialog
+    from dialogs import PlatformSetupDialog
     dialog = PlatformSetupDialog(window.mpconfig, window.simulation.checkpoint, window)
     dialog.clock_edit.setText("20")
     dialog.window_width_edit.setText("250")
