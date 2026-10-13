@@ -19,15 +19,11 @@ jobs:
         include:
           - platform: Linux
             os: ubuntu-latest
-            shell: bash
             data_separator: ":"
-            archive_command: tar -C dist -czf MemphisVDebugger-linux.tar.gz MemphisVDebugger
             asset: MemphisVDebugger-linux.tar.gz
           - platform: Windows
             os: windows-latest
-            shell: pwsh
             data_separator: ";"
-            archive_command: Compress-Archive -Path dist/MemphisVDebugger -DestinationPath MemphisVDebugger-windows.zip
             asset: MemphisVDebugger-windows.zip
 
     steps:
@@ -68,9 +64,14 @@ jobs:
             test -x dist/MemphisVDebugger/MemphisVDebugger
           fi
 
-      - name: Package application bundle
-        shell: ${{ matrix.shell }}
-        run: ${{ matrix.archive_command }}
+      - name: Package Linux application bundle
+        if: matrix.platform == 'Linux'
+        run: tar -C dist -czf MemphisVDebugger-linux.tar.gz MemphisVDebugger
+
+      - name: Package Windows application bundle
+        if: matrix.platform == 'Windows'
+        shell: pwsh
+        run: Compress-Archive -Path dist/MemphisVDebugger -DestinationPath MemphisVDebugger-windows.zip
 
       - name: Upload packaged application
         uses: actions/upload-artifact@v4
