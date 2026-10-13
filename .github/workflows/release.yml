@@ -4,6 +4,7 @@ on:
   push:
     tags:
       - "*"
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -18,11 +19,13 @@ jobs:
         include:
           - platform: Linux
             os: ubuntu-latest
+            shell: bash
             data_separator: ":"
             archive_command: tar -C dist -czf MemphisVDebugger-linux.tar.gz MemphisVDebugger
             asset: MemphisVDebugger-linux.tar.gz
           - platform: Windows
             os: windows-latest
+            shell: pwsh
             data_separator: ";"
             archive_command: Compress-Archive -Path dist/MemphisVDebugger -DestinationPath MemphisVDebugger-windows.zip
             asset: MemphisVDebugger-windows.zip
@@ -66,7 +69,7 @@ jobs:
           fi
 
       - name: Package application bundle
-        shell: ${{ runner.os == 'Windows' && 'pwsh' || 'bash' }}
+        shell: ${{ matrix.shell }}
         run: ${{ matrix.archive_command }}
 
       - name: Upload packaged application
@@ -79,6 +82,7 @@ jobs:
   release:
     name: Publish release
     needs: build
+    if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
 
     steps:
