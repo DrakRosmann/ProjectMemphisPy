@@ -1,0 +1,94 @@
+name: Create release executables
+
+on:
+  push:
+    tags:
+      - "*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build ${{ matrix.platform }} executable
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: Linux
+            os: ubuntu-latest
+            data_separator: ":"
+            archive_command: tar -C dist -czf MemphisVDebugger-linux.tar.gz MemphisVDebugger
+            asset: MemphisVDebugger-linux.tar.gz
+          - platform: Windows
+            os: windows-latest
+            data_separator: ";"
+            archive_command: Compress-Archive -Path dist/MemphisVDebugger -DestinationPath MemphisVDebugger-windows.zip
+            asset: MemphisVDebugger-windows.zip
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up uv and Python
+        uses: astral-sh/setup-uv@v10.2.0
+        with:
+          python-version: "3.14"
+
+      - name: Install dependencies
+        run: uv sync --locked
+
+      - name: Install Qt system libraries
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libegl1 libgl1 libxkbcommon0 libfontconfig1 libdbus-1-3
+
+      - name: Build executable
+        run: >
+          uv run --locked --with pyinstaller pyinstaller
+          --noconfirm
+          --clean
+          --onedir
+          --windowed
+          --name MemphisVDebugger
+          --add-data "images${{ matrix.data_separator }}images"
+          --add-data "icon${{ matrix.data_separator }}icon"
+          --add-data "color_spectrum.png${{ matrix.data_separator }}."
+          main.py
+
+      - name: Verify executable
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            test -f dist/MemphisVDebugger/MemphisVDebugger.exe
+          else
+            test -x dist/MemphisVDebugger/MemphisVDebugger
+          fi
+
+      - name: Package application bundle
+        shell: ${{ runner.os == 'Windows' && 'pwsh' || 'bash' }}
+        run: ${{ matrix.archive_command }}
+
+      - name: Upload packaged application
+        uses: actions/upload-artifact@v4
+        with:
+          name: MemphisVDebugger-${{ matrix.platform }}
+          path: ${{ matrix.asset }}
+          if-no-files-found: error
+
+  release:
+    name: Publish release
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download packaged applications
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+
+      - name: Create GitHub release and upload executables
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release-assets/*
